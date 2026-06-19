@@ -16,7 +16,7 @@ Distributed typeahead search with FastAPI, Redis caching, and SQLite.
 docker-compose up -d
 
 # Install dependencies (use virtual environment)
-python -m venv .venv
+python3.11 -m venv .venv  # or python3.12 / python3.13 (3.11+ required)
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
@@ -27,6 +27,7 @@ uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 ### Tests
 
 ```bash
+source .venv/bin/activate
 pytest tests/ -v
 ```
 
