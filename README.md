@@ -38,6 +38,36 @@ curl http://localhost:8000/health
 # {"status":"OK"}
 ```
 
+## Phase 1: Data Layer
+
+Load at least 100,000 search queries into SQLite (WAL mode). The loader reads
+`data/queries.csv` when present and generates additional realistic synthetic
+queries to reach the minimum dataset size.
+
+```bash
+source .venv/bin/activate
+python scripts/load_data.py
+```
+
+Optional flags:
+
+```bash
+python scripts/load_data.py --csv data/queries.csv --db data/queries.db --min-rows 100000
+```
+
+Verify the seeded database:
+
+```bash
+python -c "
+import sqlite3
+conn = sqlite3.connect('data/queries.db')
+print('count:', conn.execute('SELECT COUNT(*) FROM queries').fetchone()[0])
+print('journal_mode:', conn.execute('PRAGMA journal_mode').fetchone()[0])
+"
+```
+
+`data/queries.db` is generated locally and is not committed to git.
+
 ### Project Structure
 
 ```

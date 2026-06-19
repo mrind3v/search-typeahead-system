@@ -5,3 +5,5 @@ lec-transcript2.txt
 project-req.md
 
 .venv/
+data/queries.db
+data/queries.db-*
