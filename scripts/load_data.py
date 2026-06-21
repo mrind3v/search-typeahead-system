@@ -17,7 +17,7 @@ from src.config import DATABASE_PATH
 from src.database import bulk_insert_queries, get_row_count, init_db
 
 DEFAULT_CSV = ROOT / "data" / "queries.csv"
-MIN_QUERY_COUNT = 100_000
+MIN_QUERY_COUNT = 500_000
 BATCH_SIZE = 5_000
 
 PRODUCTS = (
@@ -43,6 +43,168 @@ PRODUCTS = (
     "graphql api",
 )
 
+CATEGORY_PRODUCTS: dict[str, tuple[str, ...]] = {
+    "Electronics": (
+        "smart tv",
+        "bluetooth speaker",
+        "power bank",
+        "dslr camera",
+        "smartwatch",
+        "tablet",
+        "gaming console",
+        "wifi router",
+    ),
+    "Clothing": (
+        "cotton kurta",
+        "denim jeans",
+        "running shoes",
+        "winter jacket",
+        "saree",
+        "formal shirt",
+        "sports t-shirt",
+        "leather belt",
+    ),
+    "Groceries": (
+        "basmati rice",
+        "olive oil",
+        "organic honey",
+        "green tea",
+        "protein powder",
+        "almond milk",
+        "instant noodles",
+        "dark chocolate",
+    ),
+    "Home appliances": (
+        "air conditioner",
+        "washing machine",
+        "microwave oven",
+        "vacuum cleaner",
+        "water purifier",
+        "ceiling fan",
+        "induction cooktop",
+        "room heater",
+    ),
+    "Beauty products": (
+        "face serum",
+        "sunscreen spf 50",
+        "hair oil",
+        "lipstick",
+        "moisturizer",
+        "perfume",
+        "face wash",
+        "beard trimmer",
+    ),
+    "Books": (
+        "fiction novel",
+        "ncert textbook",
+        "self help book",
+        "comic book",
+        "cookbook",
+        "history book",
+        "poetry collection",
+        "exam guide",
+    ),
+    "Furniture": (
+        "office chair",
+        "study table",
+        "sofa set",
+        "queen size bed",
+        "bookshelf",
+        "dining table",
+        "wardrobe",
+        "mattress",
+    ),
+    "Automobiles": (
+        "electric scooter",
+        "car insurance",
+        "bike helmet",
+        "car tyre",
+        "engine oil",
+        "car battery",
+        "dash cam",
+        "bike service",
+    ),
+    "Travel": (
+        "flight tickets",
+        "hotel booking",
+        "train reservation",
+        "bus tickets",
+        "holiday package",
+        "travel insurance",
+        "cab booking",
+        "homestay",
+    ),
+}
+
+INDIAN_CRICKET = (
+    "ipl 2025",
+    "ipl live score",
+    "csk vs mi",
+    "rcb vs kkr",
+    "india vs australia",
+    "world cup 2025",
+    "icc rankings",
+    "cricket highlights",
+    "ms dhoni",
+    "virat kohli century",
+    "wtc final",
+    "t20 world cup",
+)
+
+INDIAN_FESTIVALS = (
+    "diwali gifts",
+    "diwali decoration",
+    "holi colours",
+    "navratri garba",
+    "raksha bandhan gifts",
+    "ganesh chaturthi",
+    "onam sadhya",
+    "pongal recipes",
+    "eid special dishes",
+    "christmas cake india",
+    "republic day parade",
+    "independence day speech",
+)
+
+INDIAN_EXAMS = (
+    "jee main 2025",
+    "jee advanced syllabus",
+    "neet preparation",
+    "upsc prelims",
+    "gate cse",
+    "cat mock test",
+    "cbse board exam",
+    "ssc cgl",
+    "nda admit card",
+    "clat application",
+)
+
+INDIAN_ENTERTAINMENT = (
+    "bollywood new release",
+    "srk movie",
+    "pushpa 2",
+    "rrr sequel",
+    "tamil movie download",
+    "telugu blockbuster",
+    "netflix india",
+    "hotstar subscription",
+    "spotify premium india",
+    "k-pop india tour",
+)
+
+INDIAN_TECH = (
+    "jio recharge",
+    "airtel 5g",
+    "upi payment",
+    "paytm wallet",
+    "aadhaar update",
+    "digilocker",
+    "bhim app",
+    "phonepe offers",
+    "swiggy coupon",
+    "zomato gold",
+)
+
 MODIFIERS = (
     "pro",
     "max",
@@ -54,9 +216,7 @@ MODIFIERS = (
     "review",
     "price",
     "deals",
-    "best",
     "cheap",
-    "near me",
     "for beginners",
     "crash course",
     "charger",
@@ -64,12 +224,24 @@ MODIFIERS = (
     "screen protector",
     "warranty",
     "unboxing",
+    "online",
+    "in india",
+    "free delivery",
+    "emi",
+    "cashback",
 )
 
 QUALIFIERS = (
     "buy",
     "how to",
     "what is",
+    "why is",
+    "when is",
+    "where is",
+    "best",
+    "top",
+    "near me",
+    "latest",
     "vs",
     "compare",
     "fix",
@@ -78,6 +250,15 @@ QUALIFIERS = (
     "config",
     "example",
 )
+
+ALL_CATEGORY_PRODUCTS = tuple(
+    product for products in CATEGORY_PRODUCTS.values() for product in products
+)
+ALL_CATEGORIES = tuple(CATEGORY_PRODUCTS.keys())
+INDIAN_TERMS = (
+    INDIAN_CRICKET + INDIAN_FESTIVALS + INDIAN_EXAMS + INDIAN_ENTERTAINMENT + INDIAN_TECH
+)
+ALL_PRODUCTS = PRODUCTS + ALL_CATEGORY_PRODUCTS
 
 
 def read_csv_rows(csv_path: Path) -> list[tuple[str, int]]:
@@ -103,32 +284,91 @@ def read_csv_rows(csv_path: Path) -> list[tuple[str, int]]:
     return rows
 
 
+def _sample_count(rng: random.Random) -> int:
+    """Sample search frequency from a heavy-tailed (power-law) distribution."""
+    raw = rng.paretovariate(1.5)
+    count = max(1, int(raw * 50))
+    return min(count, 10_000_000)
+
+
+def _pick_category_product(rng: random.Random) -> tuple[str, str]:
+    category = rng.choice(ALL_CATEGORIES)
+    product = rng.choice(CATEGORY_PRODUCTS[category])
+    return category, product
+
+
+def _build_query(rng: random.Random, pattern: int) -> str:
+    if pattern == 0:
+        return f"{rng.choice(QUALIFIERS)} {rng.choice(ALL_PRODUCTS)}"
+    if pattern == 1:
+        return f"{rng.choice(ALL_PRODUCTS)} {rng.choice(MODIFIERS)}"
+    if pattern == 2:
+        category, product = _pick_category_product(rng)
+        return f"{category.lower()} {product}"
+    if pattern == 3:
+        return f"{rng.choice(QUALIFIERS)} {rng.choice(ALL_PRODUCTS)} {rng.choice(MODIFIERS)}"
+    if pattern == 4:
+        return (
+            f"{rng.choice(INDIAN_TERMS)} {rng.choice(MODIFIERS)} "
+            f"{rng.randint(1, 999)}"
+        )
+    if pattern == 5:
+        return f"{rng.choice(QUALIFIERS)} {rng.choice(INDIAN_TERMS)}"
+    if pattern == 6:
+        category, product = _pick_category_product(rng)
+        return f"{rng.choice(QUALIFIERS)} {product} {category.lower()}"
+    if pattern == 7:
+        return (
+            f"{rng.choice(INDIAN_CRICKET)} {rng.choice(('highlights', 'score', 'schedule'))}"
+        )
+    if pattern == 8:
+        return f"{rng.choice(INDIAN_EXAMS)} {rng.choice(MODIFIERS)}"
+    if pattern == 9:
+        return (
+            f"{rng.choice(INDIAN_FESTIVALS)} {rng.choice(('ideas', 'shopping', 'recipes'))}"
+        )
+    if pattern == 10:
+        return (
+            f"{rng.choice(INDIAN_ENTERTAINMENT)} {rng.choice(('review', 'trailer', 'tickets'))}"
+        )
+    if pattern == 11:
+        return f"{rng.choice(PRODUCTS)} {rng.choice(MODIFIERS)} variant {rng.randint(1, 5000)}"
+    if pattern == 12:
+        return (
+            f"{rng.choice(QUALIFIERS)} {rng.choice(ALL_PRODUCTS)} "
+            f"{rng.choice(MODIFIERS)} {rng.randint(1, 9999)}"
+        )
+    if pattern == 13:
+        return f"{rng.choice(INDIAN_TECH)} {rng.choice(('offer', 'plan', 'update'))}"
+    if pattern == 14:
+        category, product = _pick_category_product(rng)
+        return (
+            f"{rng.choice(QUALIFIERS)} {product} {rng.choice(MODIFIERS)} "
+            f"{category.lower()}"
+        )
+    return f"{rng.choice(ALL_PRODUCTS)} {rng.randint(1, 99)}"
+
+
 def generate_synthetic_queries(target_count: int, seed: int = 42) -> list[tuple[str, int]]:
     """Generate realistic unique search queries with frequency counts."""
     rng = random.Random(seed)
     queries: dict[str, int] = {}
-    attempt = 0
+    pattern_count = 15
+    max_attempts = target_count * 20
+    attempts = 0
 
-    while len(queries) < target_count:
-        attempt += 1
-        pattern = attempt % 5
-        if pattern == 0:
-            query = f"{rng.choice(QUALIFIERS)} {rng.choice(PRODUCTS)}"
-        elif pattern == 1:
-            query = f"{rng.choice(PRODUCTS)} {rng.choice(MODIFIERS)}"
-        elif pattern == 2:
-            query = f"{rng.choice(PRODUCTS)} {rng.choice(MODIFIERS)} {rng.randint(1, 99)}"
-        elif pattern == 3:
-            query = f"{rng.choice(PRODUCTS)} {rng.choice(MODIFIERS)} variant {rng.randint(1, 5000)}"
-        else:
-            query = (
-                f"{rng.choice(QUALIFIERS)} {rng.choice(PRODUCTS)} "
-                f"{rng.choice(MODIFIERS)} {rng.randint(1, 9999)}"
-            )
-
+    while len(queries) < target_count and attempts < max_attempts:
+        attempts += 1
+        pattern = rng.randrange(pattern_count)
+        query = _build_query(rng, pattern)
         query = " ".join(query.split())
-        if query not in queries:
-            queries[query] = rng.randint(1, 100_000)
+        if query and query not in queries:
+            queries[query] = _sample_count(rng)
+
+    if len(queries) < target_count:
+        raise RuntimeError(
+            f"Could only generate {len(queries)} unique queries; target was {target_count}"
+        )
 
     return list(queries.items())
 
