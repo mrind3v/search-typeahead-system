@@ -125,3 +125,39 @@ def test_set_suggestions_uses_configured_limit_from_db(
 
     assert len(result) == SUGGESTION_LIMIT
     assert result[0][1] >= result[-1][1]
+
+
+def test_concurrent_same_prefix_serializes_db_load(
+    cache_manager: CacheManager,
+) -> None:
+    import threading
+
+    prefix = "iph"
+    db_calls = 0
+    release_event = threading.Event()
+
+    def slow_db_loader(
+        prefix_arg: str,
+        limit: int,
+        db_path: Path | None,
+    ) -> list[tuple[str, int]]:
+        nonlocal db_calls
+        db_calls += 1
+        release_event.wait(timeout=1.0)
+        return [("iphone 15", 500)]
+
+    cache_manager._db_loader = slow_db_loader
+
+    async def run_concurrent_requests() -> list[list[tuple[str, int]]]:
+        tasks = [asyncio.create_task(cache_manager.get_suggestions(prefix)) for _ in range(5)]
+        await asyncio.sleep(0.05)
+        assert db_calls == 1
+        release_event.set()
+        return await asyncio.gather(*tasks)
+
+    results = asyncio.run(run_concurrent_requests())
+
+    assert all(result == [("iphone 15", 500)] for result in results)
+    assert db_calls == 1
+    assert cache_manager.cache_misses == 1
+    assert cache_manager.cache_hits == 4

@@ -1,4 +1,4 @@
-"""Redis cache manager with consistent hashing (Phase 3)."""
+"""Redis cache manager with thundering herd protection (Phase 3)."""
 
 from __future__ import annotations
 
@@ -45,6 +45,7 @@ class CacheManager:
         self._node_by_name = {node.name: node for node in nodes}
         self._clients: dict[str, aioredis.Redis] = clients if clients is not None else {}
         self._owns_clients = clients is None
+        self._prefix_locks: dict[str, asyncio.Lock] = {}
         self._cache_hits = 0
         self._cache_misses = 0
 
@@ -89,6 +90,14 @@ class CacheManager:
                 f"No Redis client configured for node '{node_name}'"
             ) from exc
 
+
+    def _get_lock(self, prefix: str) -> asyncio.Lock:
+        lock = self._prefix_locks.get(prefix)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._prefix_locks[prefix] = lock
+        return lock
+
     @staticmethod
     def _serialize(data: list[Suggestion]) -> str:
         return json.dumps(data)
@@ -109,14 +118,22 @@ class CacheManager:
             return self._deserialize(cached)
 
         self._cache_misses += 1
-        suggestions = await asyncio.to_thread(
-            self._db_loader,
-            prefix,
-            self._suggestion_limit,
-            self._db_path,
-        )
-        await self.set_suggestions(prefix, suggestions)
-        return suggestions
+        lock = self._get_lock(prefix)
+        async with lock:
+            cached = await client.get(cache_key)
+            if cached is not None:
+                self._cache_hits += 1
+                self._cache_misses -= 1
+                return self._deserialize(cached)
+
+            suggestions = await asyncio.to_thread(
+                self._db_loader,
+                prefix,
+                self._suggestion_limit,
+                self._db_path,
+            )
+            await self.set_suggestions(prefix, suggestions)
+            return suggestions
 
     async def set_suggestions(
         self,
