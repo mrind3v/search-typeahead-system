@@ -1,1 +1,131 @@
-"""Redis cache manager with thundering herd protection (Phase 3)."""
+"""Redis cache manager with consistent hashing (Phase 3)."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from collections.abc import Callable
+from pathlib import Path
+
+import redis.asyncio as aioredis
+
+from src.cache.consistent_hash import ConsistentHashRing
+from src.config import (
+    CACHE_KEY_PREFIX,
+    CACHE_TTL_SECONDS,
+    REDIS_NODES,
+    RedisNode,
+    SUGGESTION_LIMIT,
+)
+from src.database import get_suggestions_by_prefix
+
+Suggestion = tuple[str, int]
+
+
+class CacheManager:
+    """Distributed prefix cache backed by Redis with lazy DB fill on miss."""
+
+    def __init__(
+        self,
+        redis_nodes: list[RedisNode] | None = None,
+        ttl_seconds: int = CACHE_TTL_SECONDS,
+        key_prefix: str = CACHE_KEY_PREFIX,
+        suggestion_limit: int = SUGGESTION_LIMIT,
+        db_path: str | Path | None = None,
+        clients: dict[str, aioredis.Redis] | None = None,
+        db_loader: Callable[[str, int, str | Path | None], list[Suggestion]] | None = None,
+    ) -> None:
+        nodes = redis_nodes if redis_nodes is not None else REDIS_NODES
+        self._ttl_seconds = ttl_seconds
+        self._key_prefix = key_prefix
+        self._suggestion_limit = suggestion_limit
+        self._db_path = db_path
+        self._db_loader = db_loader or get_suggestions_by_prefix
+        self._ring = ConsistentHashRing([node.name for node in nodes])
+        self._node_by_name = {node.name: node for node in nodes}
+        self._clients: dict[str, aioredis.Redis] = clients if clients is not None else {}
+        self._owns_clients = clients is None
+        self._cache_hits = 0
+        self._cache_misses = 0
+
+    @property
+    def cache_hits(self) -> int:
+        return self._cache_hits
+
+    @property
+    def cache_misses(self) -> int:
+        return self._cache_misses
+
+    async def connect(self) -> None:
+        """Create Redis clients for every configured node."""
+        if not self._owns_clients or self._clients:
+            return
+
+        for node_name, node in self._node_by_name.items():
+            self._clients[node_name] = aioredis.Redis(
+                host=node.host,
+                port=node.port,
+                decode_responses=True,
+            )
+
+    async def close(self) -> None:
+        """Close Redis clients created by this manager."""
+        if not self._owns_clients:
+            return
+
+        for client in self._clients.values():
+            await client.aclose()
+        self._clients.clear()
+
+    def _cache_key(self, prefix: str) -> str:
+        return f"{self._key_prefix}{prefix}"
+
+    def _client_for_prefix(self, prefix: str) -> aioredis.Redis:
+        node_name = self._ring.get_node(prefix)
+        try:
+            return self._clients[node_name]
+        except KeyError as exc:
+            raise RuntimeError(
+                f"No Redis client configured for node '{node_name}'"
+            ) from exc
+
+    @staticmethod
+    def _serialize(data: list[Suggestion]) -> str:
+        return json.dumps(data)
+
+    @staticmethod
+    def _deserialize(raw: str) -> list[Suggestion]:
+        parsed = json.loads(raw)
+        return [(str(query), int(count)) for query, count in parsed]
+
+    async def get_suggestions(self, prefix: str) -> list[Suggestion]:
+        """Return cached suggestions, filling from SQLite on miss."""
+        client = self._client_for_prefix(prefix)
+        cache_key = self._cache_key(prefix)
+
+        cached = await client.get(cache_key)
+        if cached is not None:
+            self._cache_hits += 1
+            return self._deserialize(cached)
+
+        self._cache_misses += 1
+        suggestions = await asyncio.to_thread(
+            self._db_loader,
+            prefix,
+            self._suggestion_limit,
+            self._db_path,
+        )
+        await self.set_suggestions(prefix, suggestions)
+        return suggestions
+
+    async def set_suggestions(
+        self,
+        prefix: str,
+        data: list[Suggestion],
+        ttl: int | None = None,
+    ) -> None:
+        """Store suggestions for a prefix on the node selected by consistent hashing."""
+        client = self._client_for_prefix(prefix)
+        cache_key = self._cache_key(prefix)
+        ttl_seconds = self._ttl_seconds if ttl is None else ttl
+        await client.set(cache_key, self._serialize(data), ex=ttl_seconds)
