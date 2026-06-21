@@ -164,6 +164,34 @@ class CacheManager:
         ttl_seconds = self._ttl_seconds if ttl is None else ttl
         await client.set(cache_key, self._serialize(data), ex=ttl_seconds)
 
+    def get_node_for_prefix(self, prefix: str) -> str:
+        """Return the Redis node name responsible for a prefix."""
+        return self._ring.get_node(prefix)
+
+    async def inspect_cache(
+        self, prefix: str
+    ) -> dict[str, str | bool | int | None]:
+        """Return cache routing metadata without filling from the database."""
+        node_name = self.get_node_for_prefix(prefix)
+        client = self._client_for_prefix(prefix)
+        cache_key = self._cache_key(prefix)
+
+        cached = await client.get(cache_key)
+        hit = cached is not None
+        ttl_remaining: int | None = None
+        if hit:
+            ttl = await client.ttl(cache_key)
+            if ttl >= 0:
+                ttl_remaining = ttl
+
+        return {
+            "prefix": prefix,
+            "node": node_name,
+            "cache_key": cache_key,
+            "hit": hit,
+            "ttl_remaining": ttl_remaining,
+        }
+
     async def invalidate_prefixes(self, query: str) -> None:
         """Delete cache keys for every prefix of the query (lazy invalidation)."""
         if not query:

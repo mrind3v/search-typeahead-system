@@ -2,9 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Typeahead System</title>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <h1>Typeahead System</h1>
+  <main class="container">
+    <h1>Typeahead System</h1>
+    <div class="search-box">
+      <label for="search-input" class="visually-hidden">Search</label>
+      <input
+        id="search-input"
+        type="search"
+        autocomplete="off"
+        placeholder="Search (min 3 characters)..."
+        aria-autocomplete="list"
+        aria-controls="suggestions-list"
+        aria-expanded="false"
+      >
+      <ul id="suggestions-list" class="suggestions" role="listbox" hidden></ul>
+    </div>
+    <p id="search-hint" class="hint">Type at least 3 characters to see suggestions.</p>
+  </main>
+  <script src="/static/app.js"></script>
 </body>
 </html>
