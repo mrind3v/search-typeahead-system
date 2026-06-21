@@ -1,19 +1,18 @@
 """FastAPI application entry point."""
 
 import asyncio
-import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.cache.cache_manager import CacheManager
 from src.config import DATABASE_PATH
 from src.database import init_db
-from src.metrics import record_latency
+from src.middleware.latency import LatencyMiddleware
 from src.routers import debug, metrics, search, suggest, trending
 from src.services.batch_worker import run_batch_worker
 from src.services.decay_scheduler import run_decay_scheduler
@@ -74,15 +73,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Typeahead System", lifespan=lifespan)
-
-
-@app.middleware("http")
-async def latency_middleware(request: Request, call_next):
-    start = time.perf_counter()
-    response = await call_next(request)
-    record_latency(time.perf_counter() - start)
-    return response
-
+app.add_middleware(LatencyMiddleware)
 
 app.include_router(suggest.router)
 app.include_router(search.router)
