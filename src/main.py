@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         asyncio.create_task(
             run_batch_worker(
                 search_queue,
-                cache_manager,
+                lambda: app.state.cache_manager,
                 db_path=DATABASE_PATH,
             )
         )

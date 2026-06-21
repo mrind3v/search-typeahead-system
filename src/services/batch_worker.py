@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from src.cache.cache_manager import CacheManager
@@ -13,7 +14,7 @@ from src.database import increment_counts
 
 async def run_batch_worker(
     queue: asyncio.Queue[tuple[str, int]],
-    cache_manager: CacheManager,
+    cache_manager_provider: Callable[[], CacheManager],
     db_path: str | Path | None = None,
     batch_size: int | None = None,
     flush_interval: float | None = None,
@@ -43,7 +44,11 @@ async def run_batch_worker(
         updates = list(buffer.items())
         buffer = {}
         last_flush_at = time.monotonic()
+
         await asyncio.to_thread(increment_counts, updates, resolved_db_path)
+        cache_manager = cache_manager_provider()
+        for query, _ in updates:
+            await cache_manager.invalidate_prefixes(query)
 
     try:
         while True:

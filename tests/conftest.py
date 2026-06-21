@@ -95,7 +95,11 @@ def cache_manager(fake_clients: dict[str, FakeRedis], db_path: Path) -> CacheMan
 
 
 @pytest.fixture
-def client(cache_manager: CacheManager) -> TestClient:
+def client(
+    cache_manager: CacheManager, db_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> TestClient:
+    monkeypatch.setattr("src.config.DATABASE_PATH", str(db_path))
+    monkeypatch.setattr("src.main.DATABASE_PATH", str(db_path))
     with TestClient(app) as test_client:
         app.state.cache_manager = cache_manager
         yield test_client
