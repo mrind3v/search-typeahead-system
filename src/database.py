@@ -6,7 +6,7 @@ import sqlite3
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-from src.config import DATABASE_PATH
+from src.config import DATABASE_PATH, MIN_PREFIX_LENGTH
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS queries (
@@ -96,6 +96,9 @@ def get_suggestions_by_prefix(
     db_path: str | Path | None = None,
 ) -> list[tuple[str, int]]:
     """Return prefix-matching queries ordered by count descending."""
+    if len(prefix) < MIN_PREFIX_LENGTH:
+        return []
+
     init_db(db_path)
     escaped_prefix = _escape_like_pattern(prefix)
     with get_connection(db_path) as conn:

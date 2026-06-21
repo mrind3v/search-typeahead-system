@@ -6,6 +6,9 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 
+from src.cache.cache_manager import CacheManager
+from src.routers import suggest
+
 # Tracked background tasks started during lifespan (batch worker, decay scheduler, etc.)
 background_tasks: set[asyncio.Task[object]] = set()
 
@@ -23,11 +26,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     background_tasks = set()
 
     print("Typeahead system starting up...")
+    cache_manager = CacheManager()
+    await cache_manager.connect()
+    app.state.cache_manager = cache_manager
     # Future phases: start batch worker and decay scheduler via track_background_task()
 
     yield
 
     print("Typeahead system shutting down...")
+    await cache_manager.close()
     for task in list(background_tasks):
         task.cancel()
     if background_tasks:
@@ -36,6 +43,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Typeahead System", lifespan=lifespan)
+
+app.include_router(suggest.router)
 
 
 @app.get("/health")
