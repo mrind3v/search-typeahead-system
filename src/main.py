@@ -5,10 +5,6 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-
-from src.routers import suggest
 
 # Tracked background tasks started during lifespan (batch worker, decay scheduler, etc.)
 background_tasks: set[asyncio.Task[object]] = set()
@@ -40,13 +36,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Typeahead System", lifespan=lifespan)
-app.include_router(suggest.router)
-app.mount("/static", StaticFiles(directory="src/static"), name="static")
-
-
-@app.get("/")
-async def index() -> FileResponse:
-    return FileResponse("src/static/index.html")
 
 
 @app.get("/health")

@@ -6,7 +6,7 @@ import sqlite3
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-from src.config import DATABASE_PATH, MIN_PREFIX_LENGTH
+from src.config import DATABASE_PATH
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS queries (
@@ -86,10 +86,6 @@ def get_suggestions_by_prefix(
     db_path: str | Path | None = None,
 ) -> list[tuple[str, int]]:
     """Return prefix-matching queries ordered by count descending (Phase 4)."""
-    stripped = prefix.strip()
-    if len(stripped) < MIN_PREFIX_LENGTH:
-        return []
-
     init_db(db_path)
     with get_connection(db_path) as conn:
         rows = conn.execute(
@@ -100,7 +96,7 @@ def get_suggestions_by_prefix(
             ORDER BY count DESC
             LIMIT ?
             """,
-            (f"{stripped}%", limit),
+            (f"{prefix}%", limit),
         ).fetchall()
         return [(str(row["query"]), int(row["count"])) for row in rows]
 
