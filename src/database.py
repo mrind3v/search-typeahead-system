@@ -11,13 +11,15 @@ from src.config import DATABASE_PATH
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS queries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    query TEXT UNIQUE NOT NULL,
+    query TEXT UNIQUE NOT NULL COLLATE NOCASE,
     count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_queries_prefix ON queries(query COLLATE NOCASE);
 """
+
+_CONNECTION_TIMEOUT_SECONDS = 30.0
 
 
 def _resolve_path(db_path: str | Path | None) -> Path:
@@ -30,10 +32,19 @@ def get_connection(db_path: str | Path | None = None) -> sqlite3.Connection:
     """Open a SQLite connection with WAL journal mode enabled."""
     path = _resolve_path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=_CONNECTION_TIMEOUT_SECONDS)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
     return conn
+
+
+def _escape_like_pattern(value: str) -> str:
+    """Escape LIKE wildcards so prefix matching is literal."""
+    return (
+        value.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
 
 
 def init_db(db_path: str | Path | None = None) -> None:
@@ -54,14 +65,13 @@ def bulk_insert_queries(
 
     init_db(db_path)
     with get_connection(db_path) as conn:
-        before = conn.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
+        before = conn.total_changes
         conn.executemany(
             "INSERT OR IGNORE INTO queries (query, count) VALUES (?, ?)",
             data,
         )
         conn.commit()
-        after = conn.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
-        return after - before
+        return conn.total_changes - before
 
 
 def get_row_count(db_path: str | Path | None = None) -> int:
@@ -85,18 +95,19 @@ def get_suggestions_by_prefix(
     limit: int = 10,
     db_path: str | Path | None = None,
 ) -> list[tuple[str, int]]:
-    """Return prefix-matching queries ordered by count descending (Phase 4)."""
+    """Return prefix-matching queries ordered by count descending."""
     init_db(db_path)
+    escaped_prefix = _escape_like_pattern(prefix)
     with get_connection(db_path) as conn:
         rows = conn.execute(
             """
             SELECT query, count
             FROM queries
-            WHERE query LIKE ? ESCAPE '\\'
+            WHERE query LIKE ? ESCAPE '\\' COLLATE NOCASE
             ORDER BY count DESC
             LIMIT ?
             """,
-            (f"{prefix}%", limit),
+            (f"{escaped_prefix}%", limit),
         ).fetchall()
         return [(str(row["query"]), int(row["count"])) for row in rows]
 
