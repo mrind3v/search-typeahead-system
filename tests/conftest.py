@@ -14,6 +14,24 @@ from src.database import bulk_insert_queries
 from src.main import app
 
 
+@pytest.fixture(autouse=True)
+def _noop_cache_manager_lifecycle(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Prevent TestClient lifespan from opening real Redis connections."""
+    if "test_cache_manager" in request.node.fspath.basename:
+        return
+
+    async def noop_connect(self: CacheManager) -> None:
+        return None
+
+    async def noop_close(self: CacheManager) -> None:
+        return None
+
+    monkeypatch.setattr(CacheManager, "connect", noop_connect)
+    monkeypatch.setattr(CacheManager, "close", noop_close)
+
+
 class FakeRedis:
     """Minimal async Redis stand-in keyed by cache key string."""
 
