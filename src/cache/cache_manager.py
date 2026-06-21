@@ -146,3 +146,25 @@ class CacheManager:
         cache_key = self._cache_key(prefix)
         ttl_seconds = self._ttl_seconds if ttl is None else ttl
         await client.set(cache_key, self._serialize(data), ex=ttl_seconds)
+
+    async def invalidate_prefixes(self, query: str) -> None:
+        """Delete cache keys for every prefix of the query (lazy invalidation)."""
+        if not query:
+            return
+
+        keys_by_node: dict[str, list[str]] = {}
+        for length in range(1, len(query) + 1):
+            prefix = query[:length]
+            node_name = self._ring.get_node(prefix)
+            keys_by_node.setdefault(node_name, []).append(self._cache_key(prefix))
+
+        if not keys_by_node:
+            return
+
+        await asyncio.gather(
+            *(
+                self._clients[node_name].delete(*keys)
+                for node_name, keys in keys_by_node.items()
+            )
+        )
+

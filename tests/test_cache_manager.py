@@ -23,6 +23,7 @@ class FakeRedis:
         self.store: dict[str, str] = {}
         self.get = AsyncMock(side_effect=self._get)
         self.set = AsyncMock(side_effect=self._set)
+        self.delete = AsyncMock(side_effect=self._delete)
 
     async def _get(self, key: str) -> str | None:
         return self.store.get(key)
@@ -30,6 +31,14 @@ class FakeRedis:
     async def _set(self, key: str, value: str, ex: int | None = None) -> bool:
         self.store[key] = value
         return True
+
+    async def _delete(self, *keys: str) -> int:
+        deleted = 0
+        for key in keys:
+            if key in self.store:
+                del self.store[key]
+                deleted += 1
+        return deleted
 
 
 @pytest.fixture
@@ -161,3 +170,30 @@ def test_concurrent_same_prefix_serializes_db_load(
     assert db_calls == 1
     assert cache_manager.cache_misses == 1
     assert cache_manager.cache_hits == 4
+
+
+def test_invalidate_prefixes_deletes_all_query_prefix_keys(
+    cache_manager: CacheManager,
+    fake_clients: dict[str, FakeRedis],
+) -> None:
+    query = "abc"
+    ring = ConsistentHashRing(NODE_NAMES)
+
+    for length in range(1, len(query) + 1):
+        prefix = query[:length]
+        node = ring.get_node(prefix)
+        key = f"{CACHE_KEY_PREFIX}{prefix}"
+        fake_clients[node].store[key] = "[]"
+
+    asyncio.run(cache_manager.invalidate_prefixes(query))
+
+    for length in range(1, len(query) + 1):
+        prefix = query[:length]
+        node = ring.get_node(prefix)
+        key = f"{CACHE_KEY_PREFIX}{prefix}"
+        assert key not in fake_clients[node].store
+
+    nodes_with_keys = {ring.get_node(query[:length]) for length in range(1, len(query) + 1)}
+    for node_name in nodes_with_keys:
+        fake_clients[node_name].delete.assert_awaited()
+
