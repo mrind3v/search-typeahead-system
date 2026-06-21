@@ -42,6 +42,7 @@ class FakeRedis:
         self.set = AsyncMock(side_effect=self._set)
         self.delete = AsyncMock(side_effect=self._delete)
         self.ttl = AsyncMock(side_effect=self._ttl)
+        self.scan = AsyncMock(side_effect=self._scan)
 
     async def _get(self, key: str) -> str | None:
         return self.store.get(key)
@@ -65,6 +66,15 @@ class FakeRedis:
         if key not in self.store:
             return -2
         return self.ttl_values.get(key, -1)
+
+    async def _scan(
+        self, cursor: int = 0, match: str | None = None, count: int = 100
+    ) -> tuple[int, list[str]]:
+        keys = sorted(self.store.keys())
+        if match and match.endswith("*"):
+            prefix = match[:-1]
+            keys = [key for key in keys if key.startswith(prefix)]
+        return 0, keys
 
 
 @pytest.fixture

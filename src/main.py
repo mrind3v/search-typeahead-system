@@ -14,6 +14,7 @@ from src.config import DATABASE_PATH
 from src.database import init_db
 from src.routers import debug, search, suggest
 from src.services.batch_worker import run_batch_worker
+from src.services.decay_scheduler import run_decay_scheduler
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -45,6 +46,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         asyncio.create_task(
             run_batch_worker(
                 search_queue,
+                lambda: app.state.cache_manager,
+                db_path=DATABASE_PATH,
+            )
+        )
+    )
+    track_background_task(
+        asyncio.create_task(
+            run_decay_scheduler(
                 lambda: app.state.cache_manager,
                 db_path=DATABASE_PATH,
             )

@@ -142,3 +142,22 @@ def apply_decay(
         )
         conn.commit()
         return cursor.rowcount
+
+
+def get_trending_queries(
+    limit: int = 10,
+    db_path: str | Path | None = None,
+) -> list[tuple[str, int]]:
+    """Return top global queries ordered by count descending (Phase 6)."""
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT query, count
+            FROM queries
+            WHERE count > 0
+            ORDER BY count DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [(str(row["query"]), int(row["count"])) for row in rows]

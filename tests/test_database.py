@@ -5,10 +5,12 @@ from pathlib import Path
 import pytest
 
 from src.database import (
+    apply_decay,
     bulk_insert_queries,
     get_journal_mode,
     get_row_count,
     get_suggestions_by_prefix,
+    get_trending_queries,
     init_db,
 )
 
@@ -94,3 +96,38 @@ def test_get_suggestions_by_prefix_escapes_underscore_wildcard(db_path: Path) ->
     )
     results = get_suggestions_by_prefix("a_b", db_path=db_path)
     assert results == [("a_b test", 40)]
+
+
+def test_apply_decay_reduces_positive_counts(db_path: Path) -> None:
+    bulk_insert_queries(
+        [
+            ("alpha", 1000),
+            ("beta", 100),
+            ("zero", 0),
+        ],
+        db_path,
+    )
+
+    updated = apply_decay(factor=0.9, db_path=db_path)
+
+    assert updated == 2
+    assert get_trending_queries(db_path=db_path) == [
+        ("alpha", 900),
+        ("beta", 90),
+    ]
+
+
+def test_get_trending_queries_orders_by_count_desc(db_path: Path) -> None:
+    bulk_insert_queries(
+        [
+            ("low", 10),
+            ("high", 500),
+            ("mid", 100),
+        ],
+        db_path,
+    )
+
+    assert get_trending_queries(limit=2, db_path=db_path) == [
+        ("high", 500),
+        ("mid", 100),
+    ]
