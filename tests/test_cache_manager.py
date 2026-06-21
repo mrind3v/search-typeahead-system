@@ -26,6 +26,7 @@ class FakeRedis:
         self.get = AsyncMock(side_effect=self._get)
         self.set = AsyncMock(side_effect=self._set)
         self.delete = AsyncMock(side_effect=self._delete)
+        self.scan = AsyncMock(side_effect=self._scan)
 
     async def _get(self, key: str) -> str | None:
         return self.store.get(key)
@@ -41,6 +42,15 @@ class FakeRedis:
                 del self.store[key]
                 deleted += 1
         return deleted
+
+    async def _scan(
+        self, cursor: int = 0, match: str | None = None, count: int = 100
+    ) -> tuple[int, list[str]]:
+        keys = sorted(self.store.keys())
+        if match and match.endswith("*"):
+            prefix = match[:-1]
+            keys = [key for key in keys if key.startswith(prefix)]
+        return 0, keys
 
 
 @pytest.fixture
@@ -339,4 +349,41 @@ def test_invalidate_queries_prefixes_partial_failure_logs_and_deletes_healthy_no
                 assert key not in fake_clients[node].store
 
     assert any("Cache invalidation failed" in record.message for record in caplog.records)
+
+
+def test_flush_all_suggestion_cache_deletes_all_prefix_keys(
+    cache_manager: CacheManager,
+    fake_clients: dict[str, FakeRedis],
+) -> None:
+    for node in REDIS_NODES:
+        fake_clients[node.name].store[f"{CACHE_KEY_PREFIX}iph"] = "[]"
+        fake_clients[node.name].store[f"{CACHE_KEY_PREFIX}and"] = "[]"
+        fake_clients[node.name].store["other:key"] = "keep"
+
+    asyncio.run(cache_manager.flush_all_suggestion_cache())
+
+    for node in REDIS_NODES:
+        assert f"{CACHE_KEY_PREFIX}iph" not in fake_clients[node.name].store
+        assert f"{CACHE_KEY_PREFIX}and" not in fake_clients[node.name].store
+        assert fake_clients[node.name].store.get("other:key") == "keep"
+
+
+def test_flush_all_suggestion_cache_partial_failure_logs_warning(
+    cache_manager: CacheManager,
+    fake_clients: dict[str, FakeRedis],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    failing_node = REDIS_NODES[0].name
+    fake_clients[failing_node].store[f"{CACHE_KEY_PREFIX}fail"] = "[]"
+    fake_clients[failing_node].scan = AsyncMock(
+        side_effect=RuntimeError("scan unavailable"),
+    )
+
+    async def run_flush() -> None:
+        with caplog.at_level(logging.WARNING, logger="src.cache.cache_manager"):
+            await cache_manager.flush_all_suggestion_cache()
+
+    asyncio.run(run_flush())
+
+    assert any("Cache flush failed" in record.message for record in caplog.records)
 

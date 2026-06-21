@@ -143,3 +143,66 @@ h1 {
   white-space: nowrap;
   border: 0;
 }
+
+.trending-panel {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.trending-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.trending-status {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.trending-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.trending-item {
+  display: grid;
+  grid-template-columns: 2rem 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.trending-item:hover {
+  background: var(--highlight);
+  border-color: var(--accent);
+}
+
+.trending-rank {
+  color: var(--accent);
+  font-weight: 700;
+  text-align: center;
+}
+
+.trending-query {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trending-count {
+  color: var(--muted);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}

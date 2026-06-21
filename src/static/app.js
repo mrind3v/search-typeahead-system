@@ -1,13 +1,16 @@
-// Frontend typeahead UI (Phase 4).
+// Frontend typeahead UI (Phase 4) + trending panel (Phase 6).
 
 const MIN_PREFIX_LENGTH = 3;
 const DEBOUNCE_MS = 300;
+const TRENDING_REFRESH_MS = 60_000;
 
 const searchInput = document.getElementById("search-input");
 const searchButton = document.getElementById("search-button");
 const suggestionsList = document.getElementById("suggestions-list");
 const searchHint = document.getElementById("search-hint");
 const searchStatus = document.getElementById("search-status");
+const trendingList = document.getElementById("trending-list");
+const trendingStatus = document.getElementById("trending-status");
 
 let debounceTimer = null;
 let activeIndex = -1;
@@ -215,3 +218,61 @@ searchButton.addEventListener("click", () => {
 searchInput.addEventListener("blur", () => {
   window.setTimeout(clearSuggestions, 150);
 });
+
+function renderTrending(items) {
+  trendingList.innerHTML = "";
+
+  if (items.length === 0) {
+    trendingStatus.textContent = "No trending searches yet.";
+    return;
+  }
+
+  trendingStatus.textContent = `${items.length} trending search(es)`;
+
+  items.forEach((item, index) => {
+    const li = document.createElement("li");
+    li.className = "trending-item";
+
+    const rankSpan = document.createElement("span");
+    rankSpan.className = "trending-rank";
+    rankSpan.textContent = String(index + 1);
+
+    const querySpan = document.createElement("span");
+    querySpan.className = "trending-query";
+    querySpan.textContent = item.query;
+
+    const countSpan = document.createElement("span");
+    countSpan.className = "trending-count";
+    countSpan.textContent = String(item.count);
+
+    li.appendChild(rankSpan);
+    li.appendChild(querySpan);
+    li.appendChild(countSpan);
+    li.addEventListener("click", () => {
+      searchInput.value = item.query;
+      searchInput.focus();
+      scheduleFetch(item.query);
+    });
+
+    trendingList.appendChild(li);
+  });
+}
+
+async function fetchTrending() {
+  trendingStatus.textContent = "Loading trending searches...";
+  try {
+    const response = await fetch("/trending");
+    if (!response.ok) {
+      throw new Error(`Trending request failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    renderTrending(payload.trending || []);
+  } catch (error) {
+    trendingStatus.textContent = "Unable to load trending searches.";
+    trendingList.innerHTML = "";
+    console.error(error);
+  }
+}
+
+fetchTrending();
+window.setInterval(fetchTrending, TRENDING_REFRESH_MS);

@@ -225,6 +225,42 @@ class CacheManager:
                     result,
                 )
 
+    async def flush_all_suggestion_cache(self) -> None:
+        """Delete all suggestion cache keys across every Redis node."""
+        pattern = f"{self._key_prefix}*"
+        node_items = list(self._clients.items())
+        results = await asyncio.gather(
+            *(
+                self._flush_node_suggestion_keys(node_name, client, pattern)
+                for node_name, client in node_items
+            ),
+            return_exceptions=True,
+        )
+        for (node_name, _), result in zip(node_items, results, strict=True):
+            if isinstance(result, BaseException):
+                node = self._node_by_name[node_name]
+                logger.warning(
+                    "Cache flush failed on node %s (%s:%s): %s",
+                    node_name,
+                    node.host,
+                    node.port,
+                    result,
+                )
+
+    async def _flush_node_suggestion_keys(
+        self,
+        node_name: str,
+        client: aioredis.Redis,
+        pattern: str,
+    ) -> None:
+        cursor = 0
+        while True:
+            cursor, keys = await client.scan(cursor=cursor, match=pattern, count=100)
+            if keys:
+                await client.delete(*keys)
+            if cursor == 0:
+                break
+
     async def invalidate_queries_prefixes(self, queries: list[str]) -> None:
         """Delete cache keys for every prefix of all queries, deduplicated per Redis node."""
         if not queries:
