@@ -26,7 +26,7 @@ CACHE_TTL_SECONDS: int = 300
 CACHE_KEY_PREFIX: str = "suggest:"
 
 # Suggestion API (Phase 4)
-MIN_PREFIX_LENGTH: int = 3
+MIN_PREFIX_LENGTH: int = 1
 SUGGESTION_LIMIT: int = 10
 
 # Database (Phase 1)
