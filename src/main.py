@@ -10,7 +10,10 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.cache.cache_manager import CacheManager
-from src.routers import debug, suggest
+from src.config import DATABASE_PATH
+from src.database import init_db
+from src.routers import debug, search, suggest
+from src.services.batch_worker import run_batch_worker
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -31,25 +34,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     background_tasks = set()
 
     print("Typeahead system starting up...")
+    init_db(DATABASE_PATH)
     cache_manager = CacheManager()
     await cache_manager.connect()
     app.state.cache_manager = cache_manager
-    # Future phases: start batch worker and decay scheduler via track_background_task()
+
+    search_queue: asyncio.Queue[tuple[str, int]] = asyncio.Queue()
+    app.state.search_queue = search_queue
+    track_background_task(
+        asyncio.create_task(
+            run_batch_worker(
+                search_queue,
+                lambda: app.state.cache_manager,
+                db_path=DATABASE_PATH,
+            )
+        )
+    )
 
     yield
 
     print("Typeahead system shutting down...")
-    await cache_manager.close()
     for task in list(background_tasks):
         task.cancel()
     if background_tasks:
         await asyncio.gather(*background_tasks, return_exceptions=True)
+    await cache_manager.close()
     print("Background tasks cancelled.")
 
 
 app = FastAPI(title="Typeahead System", lifespan=lifespan)
 
 app.include_router(suggest.router)
+app.include_router(search.router)
 app.include_router(debug.router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

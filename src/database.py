@@ -63,7 +63,6 @@ def bulk_insert_queries(
     if not data:
         return 0
 
-    init_db(db_path)
     with get_connection(db_path) as conn:
         before = conn.total_changes
         conn.executemany(
@@ -76,7 +75,6 @@ def bulk_insert_queries(
 
 def get_row_count(db_path: str | Path | None = None) -> int:
     """Return total number of rows in the queries table."""
-    init_db(db_path)
     with get_connection(db_path) as conn:
         row = conn.execute("SELECT COUNT(*) FROM queries").fetchone()
         return int(row[0])
@@ -84,7 +82,6 @@ def get_row_count(db_path: str | Path | None = None) -> int:
 
 def get_journal_mode(db_path: str | Path | None = None) -> str:
     """Return the active SQLite journal mode (expected: wal)."""
-    init_db(db_path)
     with get_connection(db_path) as conn:
         row = conn.execute("PRAGMA journal_mode;").fetchone()
         return str(row[0]).lower()
@@ -99,7 +96,6 @@ def get_suggestions_by_prefix(
     if len(prefix) < MIN_PREFIX_LENGTH:
         return []
 
-    init_db(db_path)
     escaped_prefix = _escape_like_pattern(prefix)
     with get_connection(db_path) as conn:
         rows = conn.execute(
@@ -123,7 +119,6 @@ def increment_counts(
     if not updates:
         return
 
-    init_db(db_path)
     with get_connection(db_path) as conn:
         conn.executemany(
             """
@@ -140,7 +135,6 @@ def apply_decay(
     db_path: str | Path | None = None,
 ) -> int:
     """Apply multiplicative decay to all positive counts (Phase 6)."""
-    init_db(db_path)
     with get_connection(db_path) as conn:
         cursor = conn.execute(
             "UPDATE queries SET count = CAST(count * ? AS INTEGER) WHERE count > 0",

@@ -4,8 +4,10 @@ const MIN_PREFIX_LENGTH = 3;
 const DEBOUNCE_MS = 300;
 
 const searchInput = document.getElementById("search-input");
+const searchButton = document.getElementById("search-button");
 const suggestionsList = document.getElementById("suggestions-list");
 const searchHint = document.getElementById("search-hint");
+const searchStatus = document.getElementById("search-status");
 
 let debounceTimer = null;
 let activeIndex = -1;
@@ -126,14 +128,57 @@ function scheduleFetch(prefix) {
   }, DEBOUNCE_MS);
 }
 
+async function submitSearch() {
+  const query = searchInput.value.trim();
+  if (!query) {
+    searchStatus.textContent = "Search query cannot be empty.";
+    return;
+  }
+
+  searchStatus.textContent = "Submitting search...";
+  try {
+    const response = await fetch("/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+
+    if (!response.ok) {
+      let detail = `Search failed: ${response.status}`;
+      try {
+        const payload = await response.json();
+        if (typeof payload.detail === "string") {
+          detail = payload.detail;
+        }
+      } catch (_error) {
+        // Keep default detail when response body is not JSON.
+      }
+      throw new Error(detail);
+    }
+
+    clearSuggestions();
+    searchStatus.textContent = "Search recorded successfully.";
+  } catch (error) {
+    searchStatus.textContent =
+      error instanceof Error ? error.message : "Unable to submit search.";
+    console.error(error);
+  }
+}
+
 searchInput.addEventListener("input", () => {
-  scheduleFetch(searchInput.value.trim());
+  scheduleFetch(searchInput.value.replace(/^\s+/, ""));
 });
 
 searchInput.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     clearSuggestions();
     searchHint.textContent = "Type at least 3 characters to see suggestions.";
+    return;
+  }
+
+  if (event.key === "Enter" && activeIndex === -1) {
+    event.preventDefault();
+    submitSearch();
     return;
   }
 
@@ -161,6 +206,10 @@ searchInput.addEventListener("keydown", (event) => {
       selectSuggestion(activeIndex);
     }
   }
+});
+
+searchButton.addEventListener("click", () => {
+  submitSearch();
 });
 
 searchInput.addEventListener("blur", () => {

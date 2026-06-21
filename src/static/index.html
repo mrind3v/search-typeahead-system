@@ -9,7 +9,7 @@
 <body>
   <main class="container">
     <h1>Typeahead System</h1>
-    <div class="search-box">
+    <div class="search-bar">
       <label for="search-input" class="visually-hidden">Search</label>
       <input
         id="search-input"
@@ -20,8 +20,10 @@
         aria-controls="suggestions-list"
         aria-expanded="false"
       >
+      <button id="search-button" type="button">Search</button>
       <ul id="suggestions-list" class="suggestions" role="listbox" hidden></ul>
     </div>
+    <p id="search-status" class="search-status"></p>
     <p id="search-hint" class="hint">Type at least 3 characters to see suggestions.</p>
   </main>
   <script src="/static/app.js"></script>

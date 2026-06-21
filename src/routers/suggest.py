@@ -17,7 +17,7 @@ def _get_cache_manager(request: Request) -> CacheManager:
 @router.get("/suggest")
 async def suggest(request: Request, q: str = "") -> dict[str, list[dict[str, int | str]]]:
     """Return prefix suggestions from cache with SQLite fallback."""
-    prefix = q.strip()
+    prefix = q.lstrip()
     if len(prefix) < MIN_PREFIX_LENGTH:
         return {"suggestions": []}
 

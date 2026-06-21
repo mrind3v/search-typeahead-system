@@ -15,7 +15,9 @@ from src.database import (
 
 @pytest.fixture
 def db_path(tmp_path: Path) -> Path:
-    return tmp_path / "test_queries.db"
+    path = tmp_path / "test_queries.db"
+    init_db(path)
+    return path
 
 
 def test_init_db_creates_schema(db_path: Path) -> None:

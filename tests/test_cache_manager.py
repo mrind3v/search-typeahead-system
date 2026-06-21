@@ -13,7 +13,7 @@ import pytest
 from src.cache.cache_manager import CacheManager
 from src.cache.consistent_hash import ConsistentHashRing
 from src.config import CACHE_KEY_PREFIX, CACHE_TTL_SECONDS, REDIS_NODES, SUGGESTION_LIMIT
-from src.database import bulk_insert_queries
+from src.database import bulk_insert_queries, init_db
 
 NODE_NAMES = [node.name for node in REDIS_NODES]
 
@@ -46,6 +46,7 @@ class FakeRedis:
 @pytest.fixture
 def db_path(tmp_path: Path) -> Path:
     path = tmp_path / "cache_queries.db"
+    init_db(path)
     bulk_insert_queries(
         [
             ("iphone 15", 500),
@@ -270,6 +271,72 @@ def test_invalidate_prefixes_partial_failure_logs_and_deletes_healthy_nodes(
             assert key in fake_clients[node].store
         else:
             assert key not in fake_clients[node].store
+
+    assert any("Cache invalidation failed" in record.message for record in caplog.records)
+
+
+def test_invalidate_queries_prefixes_deduplicates_shared_prefix_keys(
+    cache_manager: CacheManager,
+    fake_clients: dict[str, FakeRedis],
+) -> None:
+    queries = ["abc", "abd"]
+    ring = ConsistentHashRing(NODE_NAMES)
+    expected_keys: set[str] = set()
+
+    for query in queries:
+        for length in range(1, len(query) + 1):
+            prefix = query[:length]
+            node = ring.get_node(prefix)
+            key = f"{CACHE_KEY_PREFIX}{prefix}"
+            expected_keys.add(key)
+            fake_clients[node].store[key] = "[]"
+
+    asyncio.run(cache_manager.invalidate_queries_prefixes(queries))
+
+    for key in expected_keys:
+        prefix = key.removeprefix(CACHE_KEY_PREFIX)
+        node = ring.get_node(prefix)
+        assert key not in fake_clients[node].store
+
+
+def test_invalidate_queries_prefixes_partial_failure_logs_and_deletes_healthy_nodes(
+    cache_manager: CacheManager,
+    fake_clients: dict[str, FakeRedis],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    queries = ["foo", "bar"]
+    ring = ConsistentHashRing(NODE_NAMES)
+    failing_node: str | None = None
+
+    for query in queries:
+        for length in range(1, len(query) + 1):
+            prefix = query[:length]
+            node = ring.get_node(prefix)
+            key = f"{CACHE_KEY_PREFIX}{prefix}"
+            fake_clients[node].store[key] = "[]"
+            if failing_node is None:
+                failing_node = node
+
+    assert failing_node is not None
+    fake_clients[failing_node].delete = AsyncMock(
+        side_effect=RuntimeError("node unavailable"),
+    )
+
+    async def run_invalidate() -> None:
+        with caplog.at_level(logging.WARNING, logger="src.cache.cache_manager"):
+            await cache_manager.invalidate_queries_prefixes(queries)
+
+    asyncio.run(run_invalidate())
+
+    for query in queries:
+        for length in range(1, len(query) + 1):
+            prefix = query[:length]
+            node = ring.get_node(prefix)
+            key = f"{CACHE_KEY_PREFIX}{prefix}"
+            if node == failing_node:
+                assert key in fake_clients[node].store
+            else:
+                assert key not in fake_clients[node].store
 
     assert any("Cache invalidation failed" in record.message for record in caplog.records)
 

@@ -15,7 +15,7 @@ def test_debug_cache_reports_miss_without_filling_cache(
     node = ConsistentHashRing([node.name for node in REDIS_NODES]).get_node(prefix)
     key = f"{CACHE_KEY_PREFIX}{prefix}"
 
-    response = client.get("/debug/cache", params={"q": prefix})
+    response = client.get("/cache/debug", params={"prefix": prefix})
 
     assert response.status_code == 200
     payload = response.json()
@@ -34,7 +34,7 @@ def test_debug_cache_reports_hit_and_ttl(client, fake_clients) -> None:
     fake_clients[node].store[key] = '[["iphone 15", 500]]'
     fake_clients[node].ttl_values[key] = 240
 
-    response = client.get("/debug/cache", params={"q": prefix})
+    response = client.get("/cache/debug", params={"prefix": prefix})
 
     assert response.status_code == 200
     payload = response.json()
@@ -43,10 +43,10 @@ def test_debug_cache_reports_hit_and_ttl(client, fake_clients) -> None:
     assert payload["ttl_remaining"] == 240
 
 
-def test_debug_cache_strips_whitespace(client) -> None:
-    response = client.get("/debug/cache", params={"q": "  iph  "})
+def test_debug_cache_lstrip_preserves_trailing_whitespace(client) -> None:
+    response = client.get("/cache/debug", params={"prefix": "  iph  "})
     assert response.status_code == 200
-    assert response.json()["prefix"] == "iph"
+    assert response.json()["prefix"] == "iph  "
 
 
 def test_inspect_cache_read_only(cache_manager, fake_clients) -> None:

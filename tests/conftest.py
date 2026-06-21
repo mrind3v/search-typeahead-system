@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from src.cache.cache_manager import CacheManager
 from src.config import REDIS_NODES
-from src.database import bulk_insert_queries
+from src.database import bulk_insert_queries, init_db
 from src.main import app
 
 
@@ -70,6 +70,7 @@ class FakeRedis:
 @pytest.fixture
 def db_path(tmp_path: Path) -> Path:
     path = tmp_path / "api_queries.db"
+    init_db(path)
     bulk_insert_queries(
         [
             ("iphone 15", 500),
@@ -95,7 +96,11 @@ def cache_manager(fake_clients: dict[str, FakeRedis], db_path: Path) -> CacheMan
 
 
 @pytest.fixture
-def client(cache_manager: CacheManager) -> TestClient:
+def client(
+    cache_manager: CacheManager, db_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> TestClient:
+    monkeypatch.setattr("src.config.DATABASE_PATH", str(db_path))
+    monkeypatch.setattr("src.main.DATABASE_PATH", str(db_path))
     with TestClient(app) as test_client:
         app.state.cache_manager = cache_manager
         yield test_client
