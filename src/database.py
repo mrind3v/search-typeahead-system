@@ -7,6 +7,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 from src.config import DATABASE_PATH, MIN_PREFIX_LENGTH
+from src.metrics import record_db_read, record_db_write
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS queries (
@@ -70,13 +71,17 @@ def bulk_insert_queries(
             data,
         )
         conn.commit()
-        return conn.total_changes - before
+        inserted = conn.total_changes - before
+        if inserted:
+            record_db_write(inserted)
+        return inserted
 
 
 def get_row_count(db_path: str | Path | None = None) -> int:
     """Return total number of rows in the queries table."""
     with get_connection(db_path) as conn:
         row = conn.execute("SELECT COUNT(*) FROM queries").fetchone()
+        record_db_read()
         return int(row[0])
 
 
@@ -84,6 +89,7 @@ def get_journal_mode(db_path: str | Path | None = None) -> str:
     """Return the active SQLite journal mode (expected: wal)."""
     with get_connection(db_path) as conn:
         row = conn.execute("PRAGMA journal_mode;").fetchone()
+        record_db_read()
         return str(row[0]).lower()
 
 
@@ -108,6 +114,7 @@ def get_suggestions_by_prefix(
             """,
             (f"{escaped_prefix}%", limit),
         ).fetchall()
+        record_db_read()
         return [(str(row["query"]), int(row["count"])) for row in rows]
 
 
@@ -128,6 +135,7 @@ def increment_counts(
             updates,
         )
         conn.commit()
+        record_db_write()
 
 
 def apply_decay(
@@ -141,6 +149,8 @@ def apply_decay(
             (factor,),
         )
         conn.commit()
+        if cursor.rowcount:
+            record_db_write()
         return cursor.rowcount
 
 
@@ -160,4 +170,5 @@ def get_trending_queries(
             """,
             (limit,),
         ).fetchall()
+        record_db_read()
         return [(str(row["query"]), int(row["count"])) for row in rows]
