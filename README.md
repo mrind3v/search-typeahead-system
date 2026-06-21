@@ -75,11 +75,6 @@ print('journal_mode:', conn.execute('PRAGMA journal_mode').fetchone()[0])
 
 `data/queries.db` is generated locally and is not committed to git.
 
-### Autocomplete rule
-
-Suggestions require **3+ characters** before the API is called (`MIN_PREFIX_LENGTH = 3`).
-The frontend debounces input (300ms) and only fetches when the prefix length threshold is met.
-
 ### Project Structure
 
 ```
