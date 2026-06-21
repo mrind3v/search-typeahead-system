@@ -2,12 +2,17 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.cache.cache_manager import CacheManager
 from src.routers import debug, suggest
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 # Tracked background tasks started during lifespan (batch worker, decay scheduler, etc.)
 background_tasks: set[asyncio.Task[object]] = set()
@@ -46,6 +51,12 @@ app = FastAPI(title="Typeahead System", lifespan=lifespan)
 
 app.include_router(suggest.router)
 app.include_router(debug.router)
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/")
+async def index() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/health")
