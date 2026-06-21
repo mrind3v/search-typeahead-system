@@ -38,6 +38,43 @@ curl http://localhost:8000/health
 # {"status":"OK"}
 ```
 
+## Phase 1: Data Layer
+
+Load at least **500,000** search queries into SQLite (WAL mode). The loader reads
+`data/queries.csv` when present (optional seed from AmazonQAC export or custom data)
+and generates additional realistic synthetic queries to reach the minimum dataset size.
+
+### Dataset recommendation
+
+**[AmazonQAC](https://huggingface.co/datasets/amazon/AmazonQAC)** is the recommended
+open-source dataset (~40M terms, `popularity` → `count`, CDLA-Permissive-2.0). The
+full download (~59GB) is not used by default. Instead, the loader synthesizes 500K
+diverse queries including India-specific patterns (cricket, festivals, exams, entertainment).
+
+```bash
+source .venv/bin/activate
+python scripts/load_data.py
+```
+
+Optional flags:
+
+```bash
+python scripts/load_data.py --csv data/queries.csv --db data/queries.db --min-rows 500000
+```
+
+Verify the seeded database:
+
+```bash
+python -c "
+import sqlite3
+conn = sqlite3.connect('data/queries.db')
+print('count:', conn.execute('SELECT COUNT(*) FROM queries').fetchone()[0])
+print('journal_mode:', conn.execute('PRAGMA journal_mode').fetchone()[0])
+"
+```
+
+`data/queries.db` is generated locally and is not committed to git.
+
 ### Project Structure
 
 ```

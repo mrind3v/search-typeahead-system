@@ -135,3 +135,46 @@ CREATE INDEX idx_queries_prefix ON queries(query COLLATE NOCASE);
 The scheduled decay approach doesn't need per-row timestamps. The decay job is a simple `UPDATE` with a scalar multiplication. If we were doing write-time EMA (rejected), we'd need `last_updated_at` to compute time deltas.
 
 ---
+
+## Dataset Strategy
+
+### Recommended Open-Source Dataset: AmazonQAC
+
+For production-scale autocomplete training data, **[AmazonQAC](https://huggingface.co/datasets/amazon/AmazonQAC)** is the best open-source fit:
+
+- ~40M unique search terms with realistic query diversity
+- `popularity` field maps directly to our `count` column
+- Licensed under **CDLA-Permissive-2.0**
+- Built for autocomplete / query-completion use cases
+
+**Caveat:** AmazonQAC is not India-specific. There is no public 100k+ Indian search log dataset. For India-relevant suggestions, use a **hybrid approach**: optional real CSV seed data plus synthetic Indian query patterns (cricket/IPL, festivals, exams, Bollywood, UPI/recharge, etc.).
+
+### Default Development Workflow: 500K Synthetic Records
+
+The full AmazonQAC download is ~59GB — impractical for default local development and CI. Instead, `scripts/load_data.py` **generates 500,000 synthetic records by default** with:
+
+- Product categories (Electronics, Clothing, Groceries, Home appliances, Beauty, Books, Furniture, Automobiles, Travel)
+- Expanded qualifiers (`why is`, `what is`, `how to`, `near me`, `latest`, etc.)
+- India-specific patterns (cricket, festivals, JEE/NEET/UPSC, Bollywood, tech/trending)
+- Heavy-tailed count distribution (power-law, not uniform)
+
+Optional: export a subset of AmazonQAC to `data/queries.csv` (`query,count` columns) and run the loader — it merges CSV rows with synthetic fill to reach `--min-rows`.
+
+```bash
+python scripts/load_data.py              # default: 500K synthetic + optional CSV
+python scripts/load_data.py --min-rows 10000  # smaller dev dataset
+```
+
+---
+
+## Autocomplete Prefix Threshold
+
+Suggestions are only returned when the user has typed **at least 3 characters** (`MIN_PREFIX_LENGTH` in `src/config.py`). Prefixes shorter than 3 characters return an empty list at every layer:
+
+- `get_suggestions_by_prefix()` in `src/database.py`
+- `GET /suggest?q={prefix}` in `src/routers/suggest.py`
+- Frontend debounce in `src/static/app.js` (no API call until input length ≥ 3)
+
+This prevents expensive prefix scans on very short inputs and matches the teaching requirement.
+
+---
