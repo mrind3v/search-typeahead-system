@@ -1,6 +1,6 @@
 // Frontend typeahead UI (Phase 4) + trending panel (Phase 6).
 
-const MIN_PREFIX_LENGTH = 3;
+const MIN_PREFIX_LENGTH = 1;
 const DEBOUNCE_MS = 300;
 const TRENDING_REFRESH_MS = 60_000;
 
@@ -111,7 +111,7 @@ function scheduleFetch(prefix) {
 
   if (prefix.length < MIN_PREFIX_LENGTH) {
     clearSuggestions();
-    searchHint.textContent = "Type at least 3 characters to see suggestions.";
+    searchHint.textContent = "Start typing to see suggestions.";
     return;
   }
 
@@ -175,7 +175,7 @@ searchInput.addEventListener("input", () => {
 searchInput.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     clearSuggestions();
-    searchHint.textContent = "Type at least 3 characters to see suggestions.";
+    searchHint.textContent = "Start typing to see suggestions.";
     return;
   }
 

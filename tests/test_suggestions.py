@@ -9,15 +9,58 @@ from src.config import CACHE_KEY_PREFIX, MIN_PREFIX_LENGTH, REDIS_NODES
 from src.database import get_suggestions_by_prefix
 
 
-def test_get_suggestions_by_prefix_returns_empty_for_short_prefix(db_path) -> None:
+def test_get_suggestions_by_prefix_returns_empty_for_empty_prefix(db_path) -> None:
+    assert get_suggestions_by_prefix("", db_path=db_path) == []
+
+
+def test_get_suggestions_by_prefix_returns_results_for_one_char_prefix(db_path) -> None:
+    results = get_suggestions_by_prefix("i", db_path=db_path)
+    assert results == [
+        ("iphone 15", 500),
+        ("iphone 14", 400),
+    ]
+
+
+def test_get_suggestions_by_prefix_returns_results_for_two_char_prefix(db_path) -> None:
     results = get_suggestions_by_prefix("ip", db_path=db_path)
-    assert results == []
+    assert results == [
+        ("iphone 15", 500),
+        ("iphone 14", 400),
+    ]
 
 
-def test_suggest_returns_empty_for_short_prefix(client) -> None:
-    response = client.get("/suggest", params={"q": "ip"})
+def test_suggest_returns_empty_for_empty_prefix(client) -> None:
+    response = client.get("/suggest", params={"q": ""})
     assert response.status_code == 200
     assert response.json() == {"suggestions": []}
+
+
+def test_suggest_returns_empty_for_whitespace_only_prefix(client) -> None:
+    response = client.get("/suggest", params={"q": "   "})
+    assert response.status_code == 200
+    assert response.json() == {"suggestions": []}
+
+
+def test_suggest_returns_results_for_one_char_prefix(client) -> None:
+    response = client.get("/suggest", params={"q": "i"})
+    assert response.status_code == 200
+    assert response.json() == {
+        "suggestions": [
+            {"query": "iphone 15", "count": 500},
+            {"query": "iphone 14", "count": 400},
+        ]
+    }
+
+
+def test_suggest_returns_results_for_two_char_prefix(client) -> None:
+    response = client.get("/suggest", params={"q": "ip"})
+    assert response.status_code == 200
+    assert response.json() == {
+        "suggestions": [
+            {"query": "iphone 15", "count": 500},
+            {"query": "iphone 14", "count": 400},
+        ]
+    }
 
 
 def test_suggest_returns_db_results_on_cache_miss(client, fake_clients) -> None:
