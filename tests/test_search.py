@@ -24,6 +24,12 @@ def test_search_strips_whitespace(client) -> None:
     assert response.json() == {"message": "Searched"}
 
 
+def test_search_empty_query_returns_400(client) -> None:
+    response = client.post("/search", json={"query": "   "})
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Search query cannot be empty"}
+
+
 def test_search_increments_count_after_flush(
     client, db_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -52,7 +58,7 @@ def test_search_invalidates_cache_after_flush(
     client.post("/search", json={"query": "iphone 15"})
     time.sleep(0.15)
 
-    response = client.get("/debug/cache", params={"q": prefix})
+    response = client.get("/cache/debug", params={"prefix": prefix})
     assert response.status_code == 200
     assert response.json()["hit"] is False
     assert key not in fake_clients[node].store

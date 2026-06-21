@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.cache.cache_manager import CacheManager
 from src.config import DATABASE_PATH
+from src.database import init_db
 from src.routers import debug, search, suggest
 from src.services.batch_worker import run_batch_worker
 
@@ -33,6 +34,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     background_tasks = set()
 
     print("Typeahead system starting up...")
+    init_db(DATABASE_PATH)
     cache_manager = CacheManager()
     await cache_manager.connect()
     app.state.cache_manager = cache_manager

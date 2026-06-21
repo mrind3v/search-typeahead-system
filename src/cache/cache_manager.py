@@ -225,3 +225,45 @@ class CacheManager:
                     result,
                 )
 
+    async def invalidate_queries_prefixes(self, queries: list[str]) -> None:
+        """Delete cache keys for every prefix of all queries, deduplicated per Redis node."""
+        if not queries:
+            return
+
+        keys_by_node: dict[str, list[str]] = {}
+        seen_keys: set[str] = set()
+
+        for query in queries:
+            if not query:
+                continue
+            for length in range(1, len(query) + 1):
+                prefix = query[:length]
+                cache_key = self._cache_key(prefix)
+                if cache_key in seen_keys:
+                    continue
+                seen_keys.add(cache_key)
+                node_name = self._ring.get_node(prefix)
+                keys_by_node.setdefault(node_name, []).append(cache_key)
+
+        if not keys_by_node:
+            return
+
+        node_keys = list(keys_by_node.items())
+        results = await asyncio.gather(
+            *(
+                self._clients[node_name].delete(*keys)
+                for node_name, keys in node_keys
+            ),
+            return_exceptions=True,
+        )
+        for (node_name, _), result in zip(node_keys, results, strict=True):
+            if isinstance(result, BaseException):
+                node = self._node_by_name[node_name]
+                logger.warning(
+                    "Cache invalidation failed on node %s (%s:%s): %s",
+                    node_name,
+                    node.host,
+                    node.port,
+                    result,
+                )
+

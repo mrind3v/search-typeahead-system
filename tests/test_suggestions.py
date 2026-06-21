@@ -58,8 +58,14 @@ def test_suggest_returns_cached_results_without_db(client, cache_manager, fake_c
     assert db_calls == 0
 
 
-def test_suggest_strips_whitespace(client) -> None:
+def test_suggest_lstrip_preserves_trailing_whitespace(client) -> None:
     response = client.get("/suggest", params={"q": "  iph  "})
+    assert response.status_code == 200
+    assert response.json() == {"suggestions": []}
+
+
+def test_suggest_lstrip_leading_whitespace(client) -> None:
+    response = client.get("/suggest", params={"q": "  iph"})
     assert response.status_code == 200
     assert len(response.json()["suggestions"]) == 2
 

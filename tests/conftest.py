@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from src.cache.cache_manager import CacheManager
 from src.config import REDIS_NODES
-from src.database import bulk_insert_queries
+from src.database import bulk_insert_queries, init_db
 from src.main import app
 
 
@@ -70,6 +70,7 @@ class FakeRedis:
 @pytest.fixture
 def db_path(tmp_path: Path) -> Path:
     path = tmp_path / "api_queries.db"
+    init_db(path)
     bulk_insert_queries(
         [
             ("iphone 15", 500),

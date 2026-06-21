@@ -7,13 +7,14 @@ import asyncio
 import pytest
 
 from src.cache.cache_manager import CacheManager
-from src.database import bulk_insert_queries, get_suggestions_by_prefix
+from src.database import bulk_insert_queries, get_suggestions_by_prefix, init_db
 from src.services.batch_worker import run_batch_worker
 
 
 @pytest.fixture
 def worker_db_path(tmp_path):
     path = tmp_path / "worker_queries.db"
+    init_db(path)
     bulk_insert_queries([("iphone 15", 100)], path)
     return path
 

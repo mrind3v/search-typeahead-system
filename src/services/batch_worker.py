@@ -47,8 +47,7 @@ async def run_batch_worker(
 
         await asyncio.to_thread(increment_counts, updates, resolved_db_path)
         cache_manager = cache_manager_provider()
-        for query, _ in updates:
-            await cache_manager.invalidate_prefixes(query)
+        await cache_manager.invalidate_queries_prefixes([q for q, _ in updates])
 
     try:
         while True:
