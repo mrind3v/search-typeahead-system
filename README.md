@@ -6,17 +6,49 @@ Distributed typeahead search built with **FastAPI**, **Redis** (4-node consisten
 
 ### Prerequisites
 
-- **Python 3.11+** — required; the FastAPI app runs on your machine, not in Docker
-- **Docker and Docker Compose** — optional but recommended; starts the four Redis cache nodes only
+- **Docker and Docker Compose** — recommended; runs Redis, the FastAPI app, and the web UI with one command
+- **Python 3.11+** — optional; only needed for local development without Docker
 
-There is no application Dockerfile. `docker-compose.yml` provisions Redis (ports 6379–6382); you install Python dependencies locally and run `uvicorn` on the host.
+### Run with Docker (recommended)
 
-### Setup
+From the project root:
+
+```bash
+docker compose up --build
+```
+
+This starts four Redis nodes plus the FastAPI app on [http://localhost:8000](http://localhost:8000).
+
+On first run, if `data/queries.db` is missing inside the container, the app automatically seeds **200K synthetic queries** (may take a minute or two). The database is stored in a Docker volume (`app-data`) so later restarts reuse it.
+
+Quick checks:
+
+```bash
+curl http://localhost:8000/health
+# {"status":"OK"}
+
+curl "http://localhost:8000/suggest?q=i"
+# prefix suggestions (non-empty prefix required)
+
+open http://localhost:8000
+```
+
+Stop the stack with `Ctrl+C`, or run detached with `docker compose up --build -d` and stop via `docker compose down`.
+
+Optional environment variables for the `app` service (set in `docker-compose.yml` or override at runtime):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SEED_MIN_ROWS` | `200000` | Minimum rows when auto-seeding on first start |
+| `DATABASE_PATH` | `/app/data/queries.db` | SQLite path inside the container |
+| `REDIS_1_HOST` … `REDIS_4_HOST` | `redis-1` … `redis-4` | Redis service hostnames in Docker |
+
+### Local development (optional)
 
 **1. Start Redis (Docker)**
 
 ```bash
-docker-compose up -d
+docker compose up -d redis-1 redis-2 redis-3 redis-4
 ```
 
 **2. Install dependencies and seed data (host)**

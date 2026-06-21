@@ -1,0 +1,16 @@
+.git
+.gitignore
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.cursorrules
+context/
+docs/E2E-TESTING.md
+data/queries.db
+data/queries.db-*

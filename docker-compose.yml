@@ -55,8 +55,37 @@ services:
       timeout: 3s
       retries: 5
 
+  app:
+    build: .
+    container_name: typeahead-app
+    ports:
+      - "8000:8000"
+    volumes:
+      - app-data:/app/data
+    environment:
+      DATABASE_PATH: /app/data/queries.db
+      SEED_MIN_ROWS: "200000"
+      REDIS_1_HOST: redis-1
+      REDIS_1_PORT: "6379"
+      REDIS_2_HOST: redis-2
+      REDIS_2_PORT: "6379"
+      REDIS_3_HOST: redis-3
+      REDIS_3_PORT: "6379"
+      REDIS_4_HOST: redis-4
+      REDIS_4_PORT: "6379"
+    depends_on:
+      redis-1:
+        condition: service_healthy
+      redis-2:
+        condition: service_healthy
+      redis-3:
+        condition: service_healthy
+      redis-4:
+        condition: service_healthy
+
 volumes:
   redis-1-data:
   redis-2-data:
   redis-3-data:
   redis-4-data:
+  app-data:
