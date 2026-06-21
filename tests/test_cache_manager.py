@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import gc
+import logging
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -196,4 +198,78 @@ def test_invalidate_prefixes_deletes_all_query_prefix_keys(
     nodes_with_keys = {ring.get_node(query[:length]) for length in range(1, len(query) + 1)}
     for node_name in nodes_with_keys:
         fake_clients[node_name].delete.assert_awaited()
+
+
+def test_prefix_lock_weakref_cleanup_allows_recreation(
+    cache_manager: CacheManager,
+) -> None:
+    prefix = "weakref-test"
+    lock = cache_manager._get_lock(prefix)
+    assert cache_manager._prefix_locks[prefix] is lock
+
+    del lock
+    gc.collect()
+
+    assert prefix not in cache_manager._prefix_locks
+    new_lock = cache_manager._get_lock(prefix)
+    assert isinstance(new_lock, asyncio.Lock)
+
+
+def test_connect_ping_failure_logs_warning_and_does_not_raise(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    manager = CacheManager()
+    mock_client = MagicMock()
+    mock_client.ping = AsyncMock(side_effect=ConnectionError("refused"))
+
+    async def run_connect() -> None:
+        with patch("src.cache.cache_manager.aioredis.Redis", return_value=mock_client):
+            with caplog.at_level(logging.WARNING, logger="src.cache.cache_manager"):
+                await manager.connect()
+
+    asyncio.run(run_connect())
+
+    assert mock_client.ping.await_count == len(REDIS_NODES)
+    assert len(manager._clients) == len(REDIS_NODES)
+    assert any("Redis ping failed" in record.message for record in caplog.records)
+
+
+def test_invalidate_prefixes_partial_failure_logs_and_deletes_healthy_nodes(
+    cache_manager: CacheManager,
+    fake_clients: dict[str, FakeRedis],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    query = "xyz"
+    ring = ConsistentHashRing(NODE_NAMES)
+    failing_node: str | None = None
+
+    for length in range(1, len(query) + 1):
+        prefix = query[:length]
+        node = ring.get_node(prefix)
+        key = f"{CACHE_KEY_PREFIX}{prefix}"
+        fake_clients[node].store[key] = "[]"
+        if failing_node is None:
+            failing_node = node
+
+    assert failing_node is not None
+    fake_clients[failing_node].delete = AsyncMock(
+        side_effect=RuntimeError("node unavailable"),
+    )
+
+    async def run_invalidate() -> None:
+        with caplog.at_level(logging.WARNING, logger="src.cache.cache_manager"):
+            await cache_manager.invalidate_prefixes(query)
+
+    asyncio.run(run_invalidate())
+
+    for length in range(1, len(query) + 1):
+        prefix = query[:length]
+        node = ring.get_node(prefix)
+        key = f"{CACHE_KEY_PREFIX}{prefix}"
+        if node == failing_node:
+            assert key in fake_clients[node].store
+        else:
+            assert key not in fake_clients[node].store
+
+    assert any("Cache invalidation failed" in record.message for record in caplog.records)
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import weakref
 from collections.abc import Callable
 from pathlib import Path
 
@@ -20,6 +22,8 @@ from src.config import (
 from src.database import get_suggestions_by_prefix
 
 Suggestion = tuple[str, int]
+
+logger = logging.getLogger(__name__)
 
 
 class CacheManager:
@@ -45,7 +49,9 @@ class CacheManager:
         self._node_by_name = {node.name: node for node in nodes}
         self._clients: dict[str, aioredis.Redis] = clients if clients is not None else {}
         self._owns_clients = clients is None
-        self._prefix_locks: dict[str, asyncio.Lock] = {}
+        self._prefix_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
         self._cache_hits = 0
         self._cache_misses = 0
 
@@ -63,11 +69,22 @@ class CacheManager:
             return
 
         for node_name, node in self._node_by_name.items():
-            self._clients[node_name] = aioredis.Redis(
+            client = aioredis.Redis(
                 host=node.host,
                 port=node.port,
                 decode_responses=True,
             )
+            self._clients[node_name] = client
+            try:
+                await client.ping()
+            except Exception as exc:
+                logger.warning(
+                    "Redis ping failed for node %s (%s:%s): %s",
+                    node_name,
+                    node.host,
+                    node.port,
+                    exc,
+                )
 
     async def close(self) -> None:
         """Close Redis clients created by this manager."""
@@ -161,10 +178,22 @@ class CacheManager:
         if not keys_by_node:
             return
 
-        await asyncio.gather(
+        node_keys = list(keys_by_node.items())
+        results = await asyncio.gather(
             *(
                 self._clients[node_name].delete(*keys)
-                for node_name, keys in keys_by_node.items()
-            )
+                for node_name, keys in node_keys
+            ),
+            return_exceptions=True,
         )
+        for (node_name, _), result in zip(node_keys, results, strict=True):
+            if isinstance(result, BaseException):
+                node = self._node_by_name[node_name]
+                logger.warning(
+                    "Cache invalidation failed on node %s (%s:%s): %s",
+                    node_name,
+                    node.host,
+                    node.port,
+                    result,
+                )
 
