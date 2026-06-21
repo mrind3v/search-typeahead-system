@@ -26,7 +26,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Seed database (500K synthetic queries by default)
+# Seed database (200K synthetic queries by default)
 python scripts/load_data.py
 ```
 
@@ -93,11 +93,11 @@ See [architecture.md](architecture.md) for design rationale (Trie rejection, con
 
 ## Dataset
 
-**[AmazonQAC](https://huggingface.co/datasets/amazon/AmazonQAC)** is recommended for production-scale data (~40M terms, `popularity` → `count`). The full download (~59GB) is impractical for local dev, so `scripts/load_data.py` generates **500K synthetic queries** by default (product categories, India-specific patterns, power-law counts).
+**[AmazonQAC](https://huggingface.co/datasets/amazon/AmazonQAC)** is recommended for production-scale data (~40M terms, `popularity` → `count`). The full download (~59GB) is impractical for local dev, so `scripts/load_data.py` generates **200K synthetic queries** by default (product categories, India-specific patterns, power-law counts).
 
 ```bash
 python scripts/load_data.py
-python scripts/load_data.py --csv data/queries.csv --min-rows 500000
+python scripts/load_data.py --csv data/queries.csv --min-rows 200000
 ```
 
 `data/queries.db` is generated locally and is not committed.
