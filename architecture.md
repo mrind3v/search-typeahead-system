@@ -15,7 +15,7 @@ flowchart TB
         SR["GET /suggest"]
         SER["POST /search"]
         TR["GET /trending"]
-        DR["GET /debug/cache"]
+        DR["GET /cache/debug"]
         MR["GET /metrics"]
 
         Q["asyncio.Queue"]
@@ -87,7 +87,7 @@ Short prefixes match too many rows (e.g. `"a"` → huge scan). The gate matches 
 
 ### Suggest (`GET /suggest?q=iph`)
 
-1. Reject if `len(q.strip()) < 3`
+1. Reject if `len(q.lstrip()) < 3`
 2. `consistent_hash.get_node(prefix)` → Redis node
 3. Cache hit → return JSON suggestions
 4. Cache miss → acquire per-prefix `asyncio.Lock`

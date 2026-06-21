@@ -55,7 +55,7 @@ pytest tests/ -v
 | `GET` | `/suggest?q={prefix}` | Top-10 prefix suggestions (≥3 chars) |
 | `POST` | `/search` | Record a search event (batched write) |
 | `GET` | `/trending` | Top trending queries by count |
-| `GET` | `/debug/cache?q={prefix}` | Cache node, hit/miss, TTL |
+| `GET` | `/cache/debug?prefix={prefix}` | Cache node, hit/miss, TTL |
 | `GET` | `/metrics` | Latency, cache, DB, and batch metrics |
 
 ## Architecture Overview
