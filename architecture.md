@@ -15,7 +15,7 @@ flowchart TB
 
         subgraph Startup["LIFESPAN STARTUP"]
             BW0["Batch Worker Task<br/>(consumes asyncio.Queue)"]
-            DS["Decay Scheduler Task<br/>(hourly decay job)"]
+            DS["Decay Scheduler Task<br/>(daily night decay job)"]
         end
 
         SR["Suggest Router<br/>GET /suggest"]
@@ -105,10 +105,10 @@ On flush, for each updated query (e.g., "iphone 15"):
   # Cache is NOT rebuilt here. Next request triggers lazy rebuild.
 ```
 
-#### 4. Decay Job (Hourly)
+#### 4. Decay Job (Daily)
 
 ```
-Scheduled task runs every hour:
+Scheduled task runs every 24 hours (daily night job):
   UPDATE queries SET count = CAST(count * 0.9 AS INTEGER) WHERE count > 0
   
 After decay: invalidate ALL cache keys (or let TTL expire naturally)
@@ -121,7 +121,7 @@ PRAGMA journal_mode=WAL;
 
 CREATE TABLE queries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    query TEXT UNIQUE NOT NULL,
+    query TEXT UNIQUE NOT NULL COLLATE NOCASE, -- Native case-insensitive unique constraint
     count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
