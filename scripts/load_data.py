@@ -205,50 +205,67 @@ INDIAN_TECH = (
     "zomato gold",
 )
 
-MODIFIERS = (
-    "pro",
-    "max",
-    "ultra",
-    "plus",
-    "mini",
-    "2024",
-    "2025",
-    "review",
+DEVICE_MODIFIERS = ("pro", "max", "ultra", "plus", "mini", "2024", "2025")
+SHOPPING_MODIFIERS = (
     "price",
     "deals",
     "cheap",
-    "for beginners",
-    "crash course",
-    "charger",
-    "case",
-    "screen protector",
-    "warranty",
-    "unboxing",
     "online",
     "in india",
     "free delivery",
     "emi",
     "cashback",
 )
-
-QUALIFIERS = (
-    "buy",
-    "how to",
-    "what is",
-    "why is",
-    "when is",
-    "where is",
-    "best",
-    "top",
-    "near me",
-    "latest",
-    "vs",
-    "compare",
-    "fix",
-    "install",
+ACCESSORY_MODIFIERS = ("charger", "case", "screen protector", "review", "unboxing", "warranty")
+TECH_MODIFIERS = (
+    "for beginners",
+    "crash course",
+    "example",
     "setup",
     "config",
-    "example",
+    "install",
+    "fix",
+    "tutorial",
+)
+EXAM_SUFFIXES = (
+    "syllabus",
+    "preparation",
+    "admit card",
+    "mock test",
+    "application",
+    "result",
+    "answer key",
+)
+
+SHOPPING_QUALIFIERS = ("buy", "best", "top", "cheap", "latest", "compare", "near me")
+TECH_QUALIFIERS = ("how to", "what is", "why is", "when is", "where is", "fix", "install", "setup", "config", "example")
+
+IPHONE_MODELS = ("15", "15 pro", "15 pro max", "14", "14 pro", "13")
+IPL_TEAMS = ("csk", "mi", "rcb", "kkr", "srh", "gt", "dc", "rr", "pbks", "lsg")
+
+ELECTRONICS_PRODUCTS = (
+    "iphone",
+    "samsung galaxy",
+    "macbook",
+    "ipad",
+    "airpods",
+    "laptop",
+    "wireless earbuds",
+    "gaming monitor",
+    "mechanical keyboard",
+)
+TECH_PRODUCTS = (
+    "python tutorial",
+    "java tutorial",
+    "react hooks",
+    "docker compose",
+    "kubernetes pods",
+    "aws lambda",
+    "machine learning",
+    "data science",
+    "neural network",
+    "typescript generics",
+    "graphql api",
 )
 
 ALL_CATEGORY_PRODUCTS = tuple(
@@ -297,56 +314,114 @@ def _pick_category_product(rng: random.Random) -> tuple[str, str]:
     return category, product
 
 
+def _build_iphone_query(rng: random.Random) -> str:
+    style = rng.randrange(6)
+    if style == 0:
+        return f"iphone {rng.choice(IPHONE_MODELS)}"
+    if style == 1:
+        return f"iphone {rng.choice(SHOPPING_MODIFIERS)}"
+    if style == 2:
+        return f"{rng.choice(SHOPPING_QUALIFIERS)} iphone"
+    if style == 3:
+        model = rng.choice(("15", "15 pro max"))
+        return f"iphone {model} {rng.choice(('price', 'review', 'unboxing'))}"
+    if style == 4:
+        return f"iphone {rng.choice(ACCESSORY_MODIFIERS)}"
+    return "iphone"
+
+
+def _build_ipl_query(rng: random.Random) -> str:
+    style = rng.randrange(6)
+    if style == 0:
+        return "ipl live score"
+    if style == 1:
+        return "ipl schedule"
+    if style == 2:
+        return "ipl points table"
+    if style == 3:
+        team_one, team_two = rng.sample(IPL_TEAMS, 2)
+        return f"ipl {team_one} vs {team_two}"
+    if style == 4:
+        return rng.choice(("ipl 2025", "ipl highlights", "ipl score today"))
+    return f"ipl {rng.choice(('highlights', 'score', 'schedule'))}"
+
+
+def _build_electronics_query(rng: random.Random) -> str:
+    product = rng.choice(ELECTRONICS_PRODUCTS)
+    style = rng.randrange(4)
+    if style == 0:
+        return f"{product} {rng.choice(DEVICE_MODIFIERS)}"
+    if style == 1:
+        return f"{product} {rng.choice(SHOPPING_MODIFIERS)}"
+    if style == 2:
+        return f"{rng.choice(SHOPPING_QUALIFIERS)} {product}"
+    return f"{product} {rng.choice(ACCESSORY_MODIFIERS)}"
+
+
+def _build_tech_query(rng: random.Random) -> str:
+    product = rng.choice(TECH_PRODUCTS)
+    style = rng.randrange(3)
+    if style == 0:
+        return f"{rng.choice(TECH_QUALIFIERS)} {product}"
+    if style == 1:
+        return f"{product} {rng.choice(TECH_MODIFIERS)}"
+    return f"{product} {rng.choice(('guide', 'cheatsheet', 'walkthrough'))}"
+
+
+def _build_category_shopping_query(rng: random.Random) -> str:
+    category, product = _pick_category_product(rng)
+    style = rng.randrange(3)
+    if style == 0:
+        return f"{category.lower()} {product}"
+    if style == 1:
+        return f"{rng.choice(SHOPPING_QUALIFIERS)} {product}"
+    return f"{product} {rng.choice(SHOPPING_MODIFIERS)}"
+
+
 def _build_query(rng: random.Random, pattern: int) -> str:
     if pattern == 0:
-        return f"{rng.choice(QUALIFIERS)} {rng.choice(ALL_PRODUCTS)}"
+        return _build_iphone_query(rng)
     if pattern == 1:
-        return f"{rng.choice(ALL_PRODUCTS)} {rng.choice(MODIFIERS)}"
+        return _build_electronics_query(rng)
     if pattern == 2:
-        category, product = _pick_category_product(rng)
-        return f"{category.lower()} {product}"
+        return _build_category_shopping_query(rng)
     if pattern == 3:
-        return f"{rng.choice(QUALIFIERS)} {rng.choice(ALL_PRODUCTS)} {rng.choice(MODIFIERS)}"
+        return _build_ipl_query(rng)
     if pattern == 4:
         return (
-            f"{rng.choice(INDIAN_TERMS)} {rng.choice(MODIFIERS)} "
-            f"{rng.randint(1, 999)}"
+            f"{rng.choice(INDIAN_CRICKET)} "
+            f"{rng.choice(('highlights', 'score', 'schedule'))}"
         )
     if pattern == 5:
-        return f"{rng.choice(QUALIFIERS)} {rng.choice(INDIAN_TERMS)}"
+        return f"{rng.choice(SHOPPING_QUALIFIERS)} {rng.choice(INDIAN_CRICKET)}"
     if pattern == 6:
-        category, product = _pick_category_product(rng)
-        return f"{rng.choice(QUALIFIERS)} {product} {category.lower()}"
+        return f"{rng.choice(INDIAN_EXAMS)} {rng.choice(EXAM_SUFFIXES)}"
     if pattern == 7:
         return (
-            f"{rng.choice(INDIAN_CRICKET)} {rng.choice(('highlights', 'score', 'schedule'))}"
+            f"{rng.choice(INDIAN_FESTIVALS)} "
+            f"{rng.choice(('ideas', 'shopping', 'recipes'))}"
         )
     if pattern == 8:
-        return f"{rng.choice(INDIAN_EXAMS)} {rng.choice(MODIFIERS)}"
+        return (
+            f"{rng.choice(INDIAN_ENTERTAINMENT)} "
+            f"{rng.choice(('review', 'trailer', 'tickets'))}"
+        )
     if pattern == 9:
-        return (
-            f"{rng.choice(INDIAN_FESTIVALS)} {rng.choice(('ideas', 'shopping', 'recipes'))}"
-        )
+        return _build_tech_query(rng)
     if pattern == 10:
-        return (
-            f"{rng.choice(INDIAN_ENTERTAINMENT)} {rng.choice(('review', 'trailer', 'tickets'))}"
-        )
-    if pattern == 11:
-        return f"{rng.choice(PRODUCTS)} {rng.choice(MODIFIERS)} variant {rng.randint(1, 5000)}"
-    if pattern == 12:
-        return (
-            f"{rng.choice(QUALIFIERS)} {rng.choice(ALL_PRODUCTS)} "
-            f"{rng.choice(MODIFIERS)} {rng.randint(1, 9999)}"
-        )
-    if pattern == 13:
         return f"{rng.choice(INDIAN_TECH)} {rng.choice(('offer', 'plan', 'update'))}"
-    if pattern == 14:
+    if pattern == 11:
         category, product = _pick_category_product(rng)
-        return (
-            f"{rng.choice(QUALIFIERS)} {product} {rng.choice(MODIFIERS)} "
-            f"{category.lower()}"
-        )
-    return f"{rng.choice(ALL_PRODUCTS)} {rng.randint(1, 99)}"
+        return f"{rng.choice(SHOPPING_QUALIFIERS)} {product} {category.lower()}"
+    if pattern == 12:
+        product = rng.choice(ALL_CATEGORY_PRODUCTS)
+        return f"{product} {rng.choice(SHOPPING_MODIFIERS)}"
+    if pattern == 13:
+        return f"{rng.choice(INDIAN_FESTIVALS)} {rng.choice(SHOPPING_MODIFIERS)}"
+    if pattern == 14:
+        return f"{rng.choice(INDIAN_ENTERTAINMENT)} {rng.choice(SHOPPING_MODIFIERS)}"
+    product = rng.choice(ELECTRONICS_PRODUCTS)
+    return f"{product} {rng.choice(DEVICE_MODIFIERS)} {rng.choice(SHOPPING_MODIFIERS)}"
 
 
 def generate_synthetic_queries(target_count: int, seed: int = 42) -> list[tuple[str, int]]:
