@@ -10,6 +10,7 @@ from pathlib import Path
 from src.cache.cache_manager import CacheManager
 from src.config import DATABASE_PATH
 from src.database import increment_counts
+from src.metrics import record_batch_flush
 
 
 async def run_batch_worker(
@@ -45,6 +46,7 @@ async def run_batch_worker(
         buffer = {}
         last_flush_at = time.monotonic()
 
+        record_batch_flush(len(updates))
         await asyncio.to_thread(increment_counts, updates, resolved_db_path)
         cache_manager = cache_manager_provider()
         await cache_manager.invalidate_queries_prefixes([q for q, _ in updates])

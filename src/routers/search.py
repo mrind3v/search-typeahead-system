@@ -7,6 +7,8 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from src.metrics import record_search_event
+
 router = APIRouter(tags=["search"])
 
 
@@ -23,4 +25,5 @@ async def search(request: Request, body: SearchRequest) -> dict[str, str]:
 
     queue: asyncio.Queue[tuple[str, int]] = request.app.state.search_queue
     await queue.put((query, 1))
+    record_search_event()
     return {"message": "Searched"}

@@ -1,8 +1,8 @@
 # Typeahead System
 
-Distributed typeahead search with FastAPI, Redis caching, and SQLite.
+Distributed typeahead search built with **FastAPI**, **Redis** (4-node consistent-hash cache), and **SQLite** (WAL). Implements prefix suggestions, batched search writes, nightly count decay, and in-process observability metrics.
 
-## Phase 0: Bootstrap
+## Quick Start
 
 ### Prerequisites
 
@@ -12,16 +12,31 @@ Distributed typeahead search with FastAPI, Redis caching, and SQLite.
 ### Setup
 
 ```bash
-# Start Redis nodes (ports 6379-6382)
+# Start 4 Redis nodes (ports 6379–6382)
 docker-compose up -d
 
-# Install dependencies (use virtual environment)
-python3.11 -m venv .venv  # or python3.12 / python3.13 (3.11+ required)
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+# Create virtual environment and install dependencies
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 
-# Run the API server
+# Seed database (500K synthetic queries by default)
+python scripts/load_data.py
+
+# Run API server
 uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+Open [http://localhost:8000](http://localhost:8000) for the search UI (3-character minimum, debounced suggestions, trending panel).
+
+### Health & Metrics
+
+```bash
+curl http://localhost:8000/health
+# {"status":"OK"}
+
+curl http://localhost:8000/metrics
+# latency p95, cache hit rate, DB read/write counters, batch write-reduction ratio
 ```
 
 ### Tests
@@ -31,67 +46,88 @@ source .venv/bin/activate
 pytest tests/ -v
 ```
 
-### Health Check
+## API Endpoints
 
-```bash
-curl http://localhost:8000/health
-# {"status":"OK"}
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Search UI |
+| `GET` | `/health` | Liveness check |
+| `GET` | `/suggest?q={prefix}` | Top-10 prefix suggestions (≥3 chars) |
+| `POST` | `/search` | Record a search event (batched write) |
+| `GET` | `/trending` | Top trending queries by count |
+| `GET` | `/cache/debug?prefix={prefix}` | Cache node, hit/miss, TTL |
+| `GET` | `/metrics` | Latency, cache, DB, and batch metrics |
+
+## Architecture Overview
+
+```
+Browser → FastAPI
+           ├─ GET /suggest → Consistent Hash → Redis cache → SQLite fallback
+           ├─ POST /search → asyncio.Queue → Batch Worker → SQLite + cache invalidation
+           └─ Background: Decay Scheduler (daily 10% count decay + cache flush)
 ```
 
-## Phase 1: Data Layer
+See [architecture.md](architecture.md) for design rationale (Trie rejection, consistent hashing, 3-char gate, batch writes, nightly decay).
 
-Load at least **500,000** search queries into SQLite (WAL mode). The loader reads
-`data/queries.csv` when present (optional seed from AmazonQAC export or custom data)
-and generates additional realistic synthetic queries to reach the minimum dataset size.
+## Key Design Choices
 
-### Dataset recommendation
+| Decision | Rationale |
+|----------|-----------|
+| **SQLite + WAL** | Zero-config persistence; concurrent reads during batched writes |
+| **Redis + consistent hashing** | Horizontally shard prefix cache across 4 nodes without a coordinator |
+| **3-character prefix gate** | Prevents expensive short-prefix scans; matches course teaching |
+| **Per-prefix `asyncio.Lock`** | Thundering-herd protection on cold cache misses |
+| **Lazy cache invalidation** | Batch worker deletes stale keys; rebuild on next suggest request |
+| **`asyncio.Queue` batching** | Amortizes writes — 100 searches can collapse to 1 DB flush |
+| **Scheduled decay (not write-time EMA)** | Nightly `count × 0.9` matches instructor “night script” pattern |
+| **In-process metrics** | p95 latency, cache hit rate, DB counters, batch reduction ratio |
 
-**[AmazonQAC](https://huggingface.co/datasets/amazon/AmazonQAC)** is the recommended
-open-source dataset (~40M terms, `popularity` → `count`, CDLA-Permissive-2.0). The
-full download (~59GB) is not used by default. Instead, the loader synthesizes 500K
-diverse queries including India-specific patterns (cricket, festivals, exams, entertainment).
+## Dataset
+
+**[AmazonQAC](https://huggingface.co/datasets/amazon/AmazonQAC)** is recommended for production-scale data (~40M terms, `popularity` → `count`). The full download (~59GB) is impractical for local dev, so `scripts/load_data.py` generates **500K synthetic queries** by default (product categories, India-specific patterns, power-law counts).
 
 ```bash
-source .venv/bin/activate
 python scripts/load_data.py
+python scripts/load_data.py --csv data/queries.csv --min-rows 500000
 ```
 
-Optional flags:
+`data/queries.db` is generated locally and is not committed.
 
-```bash
-python scripts/load_data.py --csv data/queries.csv --db data/queries.db --min-rows 500000
-```
-
-Verify the seeded database:
-
-```bash
-python -c "
-import sqlite3
-conn = sqlite3.connect('data/queries.db')
-print('count:', conn.execute('SELECT COUNT(*) FROM queries').fetchone()[0])
-print('journal_mode:', conn.execute('PRAGMA journal_mode').fetchone()[0])
-"
-```
-
-`data/queries.db` is generated locally and is not committed to git.
-
-### Project Structure
+## Project Structure
 
 ```
 src/
-├── main.py              # FastAPI app with lifespan
-├── config.py            # Redis nodes, batch settings
-├── database.py          # SQLite layer (Phase 1)
-├── cache/               # Consistent hashing + cache manager
-├── services/            # Batch worker, decay scheduler
-├── routers/             # suggest, search, debug endpoints
-└── static/              # Frontend UI
-scripts/
-└── load_data.py         # Dataset loader
-data/
-└── queries.csv          # Query dataset
+├── main.py                 # FastAPI app, lifespan, middleware
+├── config.py               # Redis nodes, batch/cache/decay settings
+├── database.py             # SQLite layer
+├── metrics.py              # Latency, DB, batch counters
+├── middleware/latency.py   # p95 latency tracking
+├── cache/
+│   ├── consistent_hash.py
+│   └── cache_manager.py
+├── services/
+│   ├── batch_worker.py
+│   └── decay_scheduler.py
+├── routers/
+│   ├── suggest.py, search.py, trending.py
+│   ├── debug.py, metrics.py
+└── static/                 # Frontend UI
+scripts/load_data.py
+tests/
+docs/screenshots/           # Demo screenshots placeholder
 ```
 
-## Architecture
+## Demo Screenshots
 
-See [architecture.md](architecture.md) and [implementation-plan.md](implementation-plan.md).
+Add UI screenshots to `docs/screenshots/` for submission (search suggestions, trending panel, `/metrics` output). Example capture:
+
+```bash
+# With server running on :8000
+open http://localhost:8000
+curl http://localhost:8000/metrics | python -m json.tool
+```
+
+## Further Reading
+
+- [architecture.md](architecture.md) — detailed flows and design decisions
+- [context/implementation-plan.md](context/implementation-plan.md) — phased build plan

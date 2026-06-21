@@ -12,7 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from src.cache.cache_manager import CacheManager
 from src.config import DATABASE_PATH
 from src.database import init_db
-from src.routers import debug, search, suggest, trending
+from src.middleware.latency import LatencyMiddleware
+from src.routers import debug, metrics, search, suggest, trending
 from src.services.batch_worker import run_batch_worker
 from src.services.decay_scheduler import run_decay_scheduler
 
@@ -72,11 +73,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Typeahead System", lifespan=lifespan)
+app.add_middleware(LatencyMiddleware)
 
 app.include_router(suggest.router)
 app.include_router(search.router)
 app.include_router(debug.router)
 app.include_router(trending.router)
+app.include_router(metrics.router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
