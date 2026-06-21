@@ -36,7 +36,7 @@ python scripts/load_data.py
 uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Open [http://localhost:8000](http://localhost:8000) for the search UI (3-character minimum, debounced suggestions, trending panel).
+Open [http://localhost:8000](http://localhost:8000) for the search UI (debounced suggestions, trending panel).
 
 ### Health & Metrics
 
@@ -61,7 +61,7 @@ pytest tests/ -v
 |--------|------|-------------|
 | `GET` | `/` | Search UI |
 | `GET` | `/health` | Liveness check |
-| `GET` | `/suggest?q={prefix}` | Top-10 prefix suggestions (≥3 chars) |
+| `GET` | `/suggest?q={prefix}` | Top-10 prefix suggestions (non-empty prefix) |
 | `POST` | `/search` | Record a search event (batched write) |
 | `GET` | `/trending` | Top trending queries by count |
 | `GET` | `/cache/debug?prefix={prefix}` | Cache node, hit/miss, TTL |
@@ -76,7 +76,7 @@ Browser → FastAPI
            └─ Background: Decay Scheduler (daily 10% count decay + cache flush)
 ```
 
-See [architecture.md](architecture.md) for design rationale (Trie rejection, consistent hashing, 3-char gate, batch writes, nightly decay).
+See [architecture.md](architecture.md) for design rationale (Trie rejection, consistent hashing, batch writes, nightly decay).
 
 ## Key Design Choices
 
@@ -84,7 +84,7 @@ See [architecture.md](architecture.md) for design rationale (Trie rejection, con
 |----------|-----------|
 | **SQLite + WAL** | Zero-config persistence; concurrent reads during batched writes |
 | **Redis + consistent hashing** | Horizontally shard prefix cache across 4 nodes without a coordinator |
-| **3-character prefix gate** | Prevents expensive short-prefix scans; matches course teaching |
+| **Non-empty prefix gate** | Skips suggest lookups for empty/whitespace-only input |
 | **Per-prefix `asyncio.Lock`** | Thundering-herd protection on cold cache misses |
 | **Lazy cache invalidation** | Batch worker deletes stale keys; rebuild on next suggest request |
 | **`asyncio.Queue` batching** | Amortizes writes — 100 searches can collapse to 1 DB flush |
