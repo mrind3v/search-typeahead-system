@@ -6,24 +6,33 @@ Distributed typeahead search built with **FastAPI**, **Redis** (4-node consisten
 
 ### Prerequisites
 
-- Python 3.11+
-- Docker and Docker Compose
+- **Python 3.11+** — required; the FastAPI app runs on your machine, not in Docker
+- **Docker and Docker Compose** — optional but recommended; starts the four Redis cache nodes only
+
+There is no application Dockerfile. `docker-compose.yml` provisions Redis (ports 6379–6382); you install Python dependencies locally and run `uvicorn` on the host.
 
 ### Setup
 
-```bash
-# Start 4 Redis nodes (ports 6379–6382)
-docker-compose up -d
+**1. Start Redis (Docker)**
 
-# Create virtual environment and install dependencies
+```bash
+docker-compose up -d
+```
+
+**2. Install dependencies and seed data (host)**
+
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
 # Seed database (500K synthetic queries by default)
 python scripts/load_data.py
+```
 
-# Run API server
+**3. Run the API server (host)**
+
+```bash
 uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
@@ -114,17 +123,17 @@ src/
 └── static/                 # Frontend UI
 scripts/load_data.py
 tests/
-docs/screenshots/           # Demo screenshots placeholder
+docs/screenshots/           # Optional demo screenshots
 ```
 
 ## Demo Screenshots
 
-Add UI screenshots to `docs/screenshots/` for submission (search suggestions, trending panel, `/metrics` output). Example capture:
+Optional UI captures live in [`docs/screenshots/`](docs/screenshots/) — for example, the search UI with suggestions, the trending panel, and JSON from `/metrics` or `/cache/debug?prefix=...`. With the server on port 8000:
 
 ```bash
-# With server running on :8000
 open http://localhost:8000
 curl http://localhost:8000/metrics | python -m json.tool
+curl "http://localhost:8000/cache/debug?prefix=iph" | python -m json.tool
 ```
 
 ## Further Reading

@@ -3,3 +3,6 @@ context/
 .venv/
 data/queries.db
 data/queries.db-*
+
+# Local-only manual testing guide (not published to GitHub)
+docs/E2E-TESTING.md
