@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.cache.cache_manager import CacheManager
-from src.routers import debug, suggest
+from src.routers import debug, search, suggest
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -34,7 +34,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     cache_manager = CacheManager()
     await cache_manager.connect()
     app.state.cache_manager = cache_manager
-    # Future phases: start batch worker and decay scheduler via track_background_task()
+
+    search_queue: asyncio.Queue[tuple[str, int]] = asyncio.Queue()
+    app.state.search_queue = search_queue
 
     yield
 
@@ -50,6 +52,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Typeahead System", lifespan=lifespan)
 
 app.include_router(suggest.router)
+app.include_router(search.router)
 app.include_router(debug.router)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
