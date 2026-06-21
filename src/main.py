@@ -10,7 +10,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from src.cache.cache_manager import CacheManager
+from src.config import DATABASE_PATH
 from src.routers import debug, search, suggest
+from src.services.batch_worker import run_batch_worker
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -37,15 +39,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     search_queue: asyncio.Queue[tuple[str, int]] = asyncio.Queue()
     app.state.search_queue = search_queue
+    track_background_task(
+        asyncio.create_task(
+            run_batch_worker(
+                search_queue,
+                cache_manager,
+                db_path=DATABASE_PATH,
+            )
+        )
+    )
 
     yield
 
     print("Typeahead system shutting down...")
-    await cache_manager.close()
     for task in list(background_tasks):
         task.cancel()
     if background_tasks:
         await asyncio.gather(*background_tasks, return_exceptions=True)
+    await cache_manager.close()
     print("Background tasks cancelled.")
 
 
