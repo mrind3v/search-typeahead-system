@@ -12,7 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.load_data import generate_synthetic_queries
+from scripts.load_data import (
+    MIN_QUERY_COUNT,
+    estimate_minimum_template_cardinality,
+    generate_synthetic_queries,
+)
 
 VARIANT_SUFFIX = re.compile(r"\bvariant\s+\d+\b")
 FORBIDDEN_NOISE_SUFFIX = re.compile(
@@ -26,13 +30,12 @@ IPHONE_SHOPPING_PATTERN = re.compile(
     r"^(iphone (price|deals|cheap|online|cashback|review|unboxing|charger|case)|"
     r"(buy|best|cheap|top|latest) iphone)"
 )
+IPL_TEAM_MATCHUP = re.compile(r"^ipl [a-z]+ vs [a-z]+( \d{4})?$")
 IPL_EXPECTED = frozenset(
     {
         "ipl live score",
         "ipl schedule",
         "ipl points table",
-        "ipl srh vs mi",
-        "ipl csk vs gt",
     }
 )
 
@@ -92,6 +95,21 @@ def test_includes_realistic_iphone_queries(sample_queries: list[tuple[str, int]]
     assert any(IPHONE_SHOPPING_PATTERN.match(query) for query in iphone_queries)
 
 
+def test_minimum_template_cardinality_supports_default_target() -> None:
+    assert estimate_minimum_template_cardinality() >= MIN_QUERY_COUNT
+
+
+def test_generate_synthetic_queries_reaches_representative_scale() -> None:
+    rows = generate_synthetic_queries(50_000, seed=42)
+    assert len(rows) == 50_000
+    assert len({query for query, _ in rows}) == 50_000
+
+
+def test_default_min_query_count_is_200k() -> None:
+    assert MIN_QUERY_COUNT == 200_000
+
+
 def test_includes_realistic_ipl_queries() -> None:
     queries = {query for query, _ in generate_synthetic_queries(2000, seed=99)}
     assert IPL_EXPECTED.issubset(queries)
+    assert any(IPL_TEAM_MATCHUP.match(query) for query in queries)

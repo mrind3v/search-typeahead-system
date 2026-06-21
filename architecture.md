@@ -51,7 +51,7 @@ A **prefix trie** (or compressed trie / DAFSA) is the classic in-memory structur
 
 We **rejected a trie** for this implementation because:
 
-1. **Persistence and scale** — Our source of truth is SQLite with 500K+ rows. Keeping a full trie in memory duplicates the dataset and complicates recovery after restarts.
+1. **Persistence and scale** — Our source of truth is SQLite with 200K+ rows. Keeping a full trie in memory duplicates the dataset and complicates recovery after restarts.
 2. **Distributed cache** — The course design shards **per-prefix keys** across Redis nodes via consistent hashing. A trie would live on one process; replicating or partitioning a mutable trie across nodes adds coordination overhead that prefix-key caching avoids.
 3. **Write amplification** — Each search updates counts. With a trie, many nodes along the path may need updates. Batched SQLite `UPSERT` + lazy Redis invalidation is simpler and matches the taught flow.
 4. **MVP fit** — `LIKE 'prefix%'` with a collation index on `query` is sufficient at demo scale; the 3-character gate bounds scan cost.
@@ -152,4 +152,4 @@ On shutdown: cancel tasks, flush remaining batch buffer, close Redis clients.
 
 ## Dataset Strategy
 
-See [README.md](README.md#dataset). Default dev workflow uses 500K synthetic queries; AmazonQAC is recommended when exporting real autocomplete training data.
+See [README.md](README.md#dataset). Default dev workflow uses 200K synthetic queries; AmazonQAC is recommended when exporting real autocomplete training data.
