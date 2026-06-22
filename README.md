@@ -1,6 +1,6 @@
 # Typeahead System
 
-Distributed typeahead search built with **FastAPI**, **Redis** (4-node consistent-hash cache), and **SQLite** (WAL). Implements prefix suggestions, batched search writes, nightly count decay, and in-process observability metrics.
+Distributed typeahead search built with **FastAPI**, **Redis**, and **SQLite**. Implements prefix suggestions, batched search writes, nightly count decay, and in-process observability metrics.
 
 ## Quick Start
 
@@ -103,9 +103,10 @@ pytest tests/ -v
 
 ```
 Browser → FastAPI
-           ├─ GET /suggest → Consistent Hash → Redis cache → SQLite fallback
-           ├─ POST /search → asyncio.Queue → Batch Worker → SQLite + cache invalidation
-           └─ Background: Decay Scheduler (daily 10% count decay + cache flush)
+           ├─ GET /suggest → Consistent Hash → Redis cache (miss → empty suggestions)
+           ├─ POST /search → asyncio.Queue → Batch Worker → SQLite + cache re-warm
+           ├─ Startup: SQLite → cache warm (all prefixes from stored queries)
+           └─ Background: Decay Scheduler (daily 10% count decay + cache flush/re-warm)
 ```
 
 See [architecture.md](architecture.md) for design rationale (Trie rejection, consistent hashing, batch writes, nightly decay).
@@ -117,8 +118,8 @@ See [architecture.md](architecture.md) for design rationale (Trie rejection, con
 | **SQLite + WAL** | Zero-config persistence; concurrent reads during batched writes |
 | **Redis + consistent hashing** | Horizontally shard prefix cache across 4 nodes without a coordinator |
 | **Non-empty prefix gate** | Skips suggest lookups for empty/whitespace-only input |
-| **Per-prefix `asyncio.Lock`** | Thundering-herd protection on cold cache misses |
-| **Lazy cache invalidation** | Batch worker deletes stale keys; rebuild on next suggest request |
+| **Cache-only suggest reads** | `GET /suggest` reads Redis only; cold miss returns `[]` (no request-time SQLite) |
+| **SQLite-backed cache warming** | Startup, batch flush, and decay re-populate Redis from SQLite |
 | **`asyncio.Queue` batching** | Amortizes writes — 100 searches can collapse to 1 DB flush |
 | **Scheduled decay (not write-time EMA)** | Nightly `count × 0.9` matches instructor “night script” pattern |
 | **In-process metrics** | p95 latency, cache hit rate, DB counters, batch reduction ratio |
@@ -171,4 +172,4 @@ curl "http://localhost:8000/cache/debug?prefix=iph" | python -m json.tool
 ## Further Reading
 
 - [architecture.md](architecture.md) — detailed flows and design decisions
-- [context/implementation-plan.md](context/implementation-plan.md) — phased build plan
+- [context/lecture-transcript.md](context/lecture-transcript.md) — instructor lecture notes (SQL persistence + cache read path)
