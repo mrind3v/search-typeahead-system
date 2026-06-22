@@ -21,12 +21,13 @@ flowchart TB
         Q["asyncio.Queue"]
         BW["Batch Worker"]
         DS["Decay Scheduler"]
+        WARM["Cache warm / re-warm"]
 
         CH["Consistent Hash Ring"]
         DB["SQLite + WAL"]
     end
 
-    subgraph Redis["Redis Cluster (4 nodes)"]
+    subgraph Redis["Independent Redis nodes (consistent hash)"]
         R1["redis-1 :6379"]
         R2["redis-2 :6380"]
         R3["redis-3 :6381"]
@@ -34,13 +35,28 @@ flowchart TB
     end
 
     SI --> MW
+    TP --> MW
     MW --> SR
     MW --> SER
-    SR --> CH --> Redis
+    MW --> TR
+    MW --> DR
+
+    SR -->|"cache-only read"| CH
+    DR -->|"inspect routing + key"| CH
+    CH --> Redis
+
+    TR -->|"direct read"| DB
+
     SER --> Q --> BW --> DB
-    BW --> CH
-    DS --> DB
-    DS --> Redis
+    BW -->|"re-warm updated prefixes"| WARM
+    WARM -->|"read"| DB
+    WARM --> CH
+
+    DB -->|"startup warm_all_from_db"| WARM
+
+    DS -->|"apply_decay"| DB
+    DS -->|"flush + full re-warm"| WARM
+
     MR --> DB
 ```
 
@@ -53,7 +69,7 @@ We **rejected a trie** for this implementation because:
 1. **Persistence and scale** — Our source of truth is SQLite with 200K+ rows. Keeping a full trie in memory duplicates the dataset and complicates recovery after restarts.
 2. **Distributed cache** — The course design shards **per-prefix keys** across Redis nodes via consistent hashing. A trie would live on one process; replicating or partitioning a mutable trie across nodes adds coordination overhead that prefix-key caching avoids.
 3. **Write amplification** — Each search updates counts. With a trie, many nodes along the path may need updates. Batched SQLite `UPSERT` + Redis re-warming is simpler and matches the taught flow.
-4. **MVP fit** — `LIKE 'prefix%'` with a collation index on `query` is sufficient at demo scale; the 3-character gate bounds scan cost.
+4. **MVP fit** — `LIKE 'prefix%'` with a collation index on `query` is sufficient at demo scale. The lecture recommends a 3-character prefix gate in production to bound scan cost; this implementation uses `MIN_PREFIX_LENGTH = 1` for demo/dev responsiveness.
 
 **Trade-off:** We avoid a hot in-memory trie by serving reads from a pre-warmed Redis cache. SQLite holds query/count data and feeds cache warming at startup, after batch flushes, and after decay — not request-time fallback for `/suggest`.
 
@@ -72,36 +88,49 @@ Four independent Redis instances act as a **distributed cache**, not Redis Clust
 
 **Flow:** `get_node("iph")` → `redis-2` → `GET suggest:iph`. Invalidation deletes `suggest:i`, `suggest:ip`, `suggest:iph`, … on their respective nodes.
 
-## Three-Character Prefix Gate
+## Prefix Gate
 
-Suggestions return `[]` until the user types **≥ 3 characters** (`MIN_PREFIX_LENGTH`):
+Suggestions return `[]` when the trimmed prefix is empty (`MIN_PREFIX_LENGTH = 1` in `src/config.py`):
 
-- `src/database.py` — skips SQL for short prefixes during cache warming
-- `GET /suggest` — enforces gate before Redis lookup
-- `src/static/app.js` — no API call until length ≥ 3
+- `src/database.py` — skips SQL for prefixes shorter than `MIN_PREFIX_LENGTH` during cache warming
+- `GET /suggest` — enforces gate before Redis lookup (cache miss also returns `[]`; no SQLite read)
+- `src/static/app.js` — mirrors `MIN_PREFIX_LENGTH = 1`; no API call until the user has typed at least one character
 
-Short prefixes match too many rows (e.g. `"a"` → huge scan). The gate matches instructor guidance and keeps SQLite warming queries bounded.
+The lecture used **3 characters** as a product choice to limit how many rows a short prefix can match (e.g. `"a"` → huge scan). This repo keeps **`MIN_PREFIX_LENGTH = 1`** so the demo UI responds on the first keystroke; warming still issues one bounded `LIKE` query per prefix key, not per suggest request.
 
 ## Request Flows
 
 ### Suggest (`GET /suggest?q=iph`)
 
-1. Reject if `len(q.lstrip()) < 3`
+1. Reject if `len(q.lstrip()) < MIN_PREFIX_LENGTH` (empty after trim)
 2. `consistent_hash.get_node(prefix)` → Redis node
 3. Cache hit → return JSON suggestions
 4. Cache miss → return `[]` (no SQLite read on the request path)
 
 SQLite is **not** queried during suggest. The cache is populated separately (see below).
 
+### Trending (`GET /trending`)
+
+1. Read top queries directly from SQLite (`get_trending_queries`)
+2. Return JSON `trending` list — no Redis, no consistent hash
+
+The browser trending panel polls this endpoint on an interval; it is independent of the suggestion cache.
+
+### Cache debug (`GET /cache/debug?prefix=…`)
+
+1. Resolve routing via consistent hash (`get_node_for_prefix`)
+2. Inspect the `suggest:{prefix}` key on the selected Redis node (hit/miss, TTL)
+3. Does **not** load from SQLite or fill the cache on miss
+
 ### Cache warming (SQLite → Redis)
 
 | Trigger | Action |
 |---------|--------|
-| **App startup** | `warm_all_from_db()` — load all queries from SQLite, warm every prefix ≥ 3 chars |
-| **Batch flush** | `warm_prefixes_for_queries()` — re-warm prefixes for updated queries |
-| **Decay cycle** | `flush_all_suggestion_cache()` then `warm_all_from_db()` |
+| **App startup** | `init_db` → `warm_all_from_db()` — load all queries from SQLite, warm every prefix ≥ `MIN_PREFIX_LENGTH` into Redis via consistent hash |
+| **Batch flush** | `increment_counts` in SQLite, then `warm_prefixes_for_queries()` — **overwrite** affected prefix keys in Redis (not a request-time fallback) |
+| **Decay cycle** | `apply_decay` in SQLite, then `flush_all_suggestion_cache()` and `warm_all_from_db()` — full cache rebuild from decayed counts |
 
-Warming reads SQLite via `get_suggestions_by_prefix` and stores results in Redis with TTL 300s.
+Warming reads SQLite via `get_suggestions_by_prefix` and stores results in Redis with TTL 300s. Request-time `/suggest` never triggers warming.
 
 ### Search (`POST /search`)
 
@@ -109,9 +138,9 @@ Warming reads SQLite via `get_suggestions_by_prefix` and stores results in Redis
 2. Push `(query, 1)` onto global `asyncio.Queue`; increment search-event metric
 3. Batch worker aggregates into `{query: accumulated_count}`
 4. Flush when buffer ≥ 100 queries **or** 10s timer elapses
-5. `increment_counts` (single DB write per flush) + re-warm affected prefix keys in Redis
+5. `increment_counts` (single DB write per flush) + `warm_prefixes_for_queries()` to re-warm/overwrite affected prefix keys in Redis
 
-**Write reduction:** 50 identical searches → 1 buffer entry → 1 DB flush. Metrics expose `write_reduction_ratio = search_events / db_writes`.
+**Write reduction:** 50 identical searches → 1 buffer entry → 1 DB flush. Metrics expose `write_reduction_ratio = search_events / db_writes`. Cache re-warm runs after the DB write, not on `/suggest` cache miss.
 
 ### Nightly Decay
 
@@ -121,7 +150,7 @@ Every 24 hours the decay scheduler runs:
 UPDATE queries SET count = CAST(count * 0.9 AS INTEGER) WHERE count > 0;
 ```
 
-Then flushes all suggestion cache keys and re-warms from SQLite so rankings reflect decayed counts. This is a **scheduled night script**, not per-write exponential moving average — simpler and aligned with the lecture.
+Then `flush_all_suggestion_cache()` deletes all `suggest:*` keys across every Redis node and `warm_all_from_db()` rebuilds the cache from SQLite so rankings reflect decayed counts. This is a **scheduled night script**, not per-write exponential moving average — simpler and aligned with the lecture.
 
 ## SQLite Schema
 
@@ -154,8 +183,9 @@ CREATE INDEX idx_queries_prefix ON queries(query COLLATE NOCASE);
 
 | Task | Role |
 |------|------|
-| Batch worker | Consume search queue, flush to SQLite, re-warm cache |
-| Decay scheduler | Daily count decay + full cache flush and re-warm |
+| Startup (`lifespan`) | `init_db`, connect Redis nodes, `warm_all_from_db()` (SQLite → cache) |
+| Batch worker | Consume search queue, flush to SQLite, re-warm affected prefixes |
+| Decay scheduler | Daily count decay in SQLite, then full cache flush + re-warm |
 
 On shutdown: cancel tasks, flush remaining batch buffer, close Redis clients.
 

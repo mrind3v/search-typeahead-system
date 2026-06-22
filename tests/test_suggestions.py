@@ -63,19 +63,28 @@ def test_suggest_returns_results_for_two_char_prefix(client) -> None:
     }
 
 
-def test_suggest_returns_db_results_on_cache_miss(client, fake_clients) -> None:
-    response = client.get("/suggest", params={"q": "iph"})
-    assert response.status_code == 200
-    assert response.json() == {
-        "suggestions": [
-            {"query": "iphone 15", "count": 500},
-            {"query": "iphone 14", "count": 400},
-        ]
-    }
+def test_suggest_returns_empty_on_cache_miss_without_db(client, cache_manager, fake_clients) -> None:
+    prefix = "iph"
+    node = ConsistentHashRing([node.name for node in REDIS_NODES]).get_node(prefix)
+    key = f"{CACHE_KEY_PREFIX}{prefix}"
 
-    node = ConsistentHashRing([node.name for node in REDIS_NODES]).get_node("iph")
-    key = f"{CACHE_KEY_PREFIX}iph"
-    assert key in fake_clients[node].store
+    # Client fixture warms cache; clear the prefix under test to simulate a miss.
+    fake_clients[node].store.pop(key, None)
+
+    db_calls = 0
+
+    def db_loader(prefix_arg: str, limit: int, db_path) -> list[tuple[str, int]]:
+        nonlocal db_calls
+        db_calls += 1
+        return [("iphone 15", 500), ("iphone 14", 400)]
+
+    cache_manager._db_loader = db_loader
+
+    response = client.get("/suggest", params={"q": prefix})
+    assert response.status_code == 200
+    assert response.json() == {"suggestions": []}
+    assert db_calls == 0
+    assert key not in fake_clients[node].store
 
 
 def test_suggest_returns_cached_results_without_db(client, cache_manager, fake_clients) -> None:

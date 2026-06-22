@@ -62,16 +62,18 @@ def test_metrics_endpoint_returns_defaults(client: TestClient) -> None:
 
 
 def test_metrics_reflect_cache_hits_and_db_reads(client: TestClient) -> None:
+    reads_before = client.get("/metrics").json()["database"]["reads"]
+
     client.get("/suggest", params={"q": "iph"})
     client.get("/suggest", params={"q": "iph"})
 
     response = client.get("/metrics")
     payload = response.json()
 
-    assert payload["cache"]["hits"] == 1
-    assert payload["cache"]["misses"] == 1
-    assert payload["cache"]["hit_rate"] == 0.5
-    assert payload["database"]["reads"] == 1
+    assert payload["cache"]["hits"] == 2
+    assert payload["cache"]["misses"] == 0
+    assert payload["cache"]["hit_rate"] == 1.0
+    assert payload["database"]["reads"] == reads_before
 
 
 def test_metrics_reflect_search_events_and_batch_reduction(client: TestClient) -> None:

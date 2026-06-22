@@ -45,5 +45,6 @@ async def run_decay_scheduler(
             )
             cache_manager = cache_manager_provider()
             await cache_manager.flush_all_suggestion_cache()
+            await cache_manager.warm_all_from_db()
     except asyncio.CancelledError:
         raise

@@ -93,6 +93,14 @@ def get_journal_mode(db_path: str | Path | None = None) -> str:
         return str(row[0]).lower()
 
 
+def get_all_queries(db_path: str | Path | None = None) -> list[str]:
+    """Return all query strings (for cache warming)."""
+    with get_connection(db_path) as conn:
+        rows = conn.execute("SELECT query FROM queries").fetchall()
+        record_db_read()
+        return [str(row["query"]) for row in rows]
+
+
 def get_suggestions_by_prefix(
     prefix: str,
     limit: int = 10,

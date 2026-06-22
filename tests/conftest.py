@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -28,8 +29,12 @@ def _noop_cache_manager_lifecycle(
     async def noop_close(self: CacheManager) -> None:
         return None
 
+    async def noop_warm_all_from_db(self: CacheManager) -> None:
+        return None
+
     monkeypatch.setattr(CacheManager, "connect", noop_connect)
     monkeypatch.setattr(CacheManager, "close", noop_close)
+    monkeypatch.setattr(CacheManager, "warm_all_from_db", noop_warm_all_from_db)
 
 
 class FakeRedis:
@@ -109,8 +114,16 @@ def cache_manager(fake_clients: dict[str, FakeRedis], db_path: Path) -> CacheMan
 def client(
     cache_manager: CacheManager, db_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> TestClient:
+    from src.database import get_all_queries
+
     monkeypatch.setattr("src.config.DATABASE_PATH", str(db_path))
     monkeypatch.setattr("src.main.DATABASE_PATH", str(db_path))
+
+    async def warm_test_cache() -> None:
+        queries = await asyncio.to_thread(get_all_queries, db_path)
+        await cache_manager.warm_prefixes_for_queries(queries)
+
+    asyncio.run(warm_test_cache())
     with TestClient(app) as test_client:
         app.state.cache_manager = cache_manager
         yield test_client
