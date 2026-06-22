@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import gc
 import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -114,7 +113,7 @@ def test_cache_hit_returns_cached_data_without_db(
     assert db_calls == 0
 
 
-def test_cache_miss_fills_from_db_and_sets_ttl(
+def test_cache_miss_returns_empty_without_db(
     cache_manager: CacheManager,
     fake_clients: dict[str, FakeRedis],
 ) -> None:
@@ -122,11 +121,34 @@ def test_cache_miss_fills_from_db_and_sets_ttl(
     node = _expected_node(prefix)
     key = f"{CACHE_KEY_PREFIX}{prefix}"
 
+    db_calls = 0
+
+    def db_loader(prefix_arg: str, limit: int, db_path: Path | None) -> list[tuple[str, int]]:
+        nonlocal db_calls
+        db_calls += 1
+        return [("iphone 15", 500)]
+
+    cache_manager._db_loader = db_loader
+
     result = asyncio.run(cache_manager.get_suggestions(prefix))
 
-    assert result == [("iphone 15", 500), ("iphone 14", 400)]
+    assert result == []
     assert cache_manager.cache_hits == 0
     assert cache_manager.cache_misses == 1
+    assert db_calls == 0
+    assert key not in fake_clients[node].store
+
+
+def test_warm_prefix_loads_from_db_and_sets_ttl(
+    cache_manager: CacheManager,
+    fake_clients: dict[str, FakeRedis],
+) -> None:
+    prefix = "iph"
+    node = _expected_node(prefix)
+    key = f"{CACHE_KEY_PREFIX}{prefix}"
+
+    asyncio.run(cache_manager.warm_prefix(prefix))
+
     assert key in fake_clients[node].store
     fake_clients[node].set.assert_awaited_once_with(
         key,
@@ -135,54 +157,47 @@ def test_cache_miss_fills_from_db_and_sets_ttl(
     )
 
 
-def test_set_suggestions_uses_configured_limit_from_db(
+def test_warm_prefix_respects_configured_limit(
     cache_manager: CacheManager,
-    fake_clients: dict[str, FakeRedis],
     db_path: Path,
 ) -> None:
     rows = [(f"iphone {index}", index) for index in range(20, 0, -1)]
     bulk_insert_queries(rows, db_path)
 
-    result = asyncio.run(cache_manager.get_suggestions("iphone"))
+    asyncio.run(cache_manager.warm_prefix("iphone"))
 
+    result = asyncio.run(cache_manager.get_suggestions("iphone"))
     assert len(result) == SUGGESTION_LIMIT
     assert result[0][1] >= result[-1][1]
 
 
-def test_concurrent_same_prefix_serializes_db_load(
+def test_concurrent_cache_miss_returns_empty_without_db(
     cache_manager: CacheManager,
 ) -> None:
-    import threading
-
     prefix = "iph"
     db_calls = 0
-    release_event = threading.Event()
 
-    def slow_db_loader(
+    def db_loader(
         prefix_arg: str,
         limit: int,
         db_path: Path | None,
     ) -> list[tuple[str, int]]:
         nonlocal db_calls
         db_calls += 1
-        release_event.wait(timeout=1.0)
         return [("iphone 15", 500)]
 
-    cache_manager._db_loader = slow_db_loader
+    cache_manager._db_loader = db_loader
 
     async def run_concurrent_requests() -> list[list[tuple[str, int]]]:
         tasks = [asyncio.create_task(cache_manager.get_suggestions(prefix)) for _ in range(5)]
-        await asyncio.sleep(0.05)
-        assert db_calls == 1
-        release_event.set()
         return await asyncio.gather(*tasks)
 
     results = asyncio.run(run_concurrent_requests())
 
-    assert all(result == [("iphone 15", 500)] for result in results)
-    assert db_calls == 1
-    assert cache_manager.cache_misses == 1
-    assert cache_manager.cache_hits == 4
+    assert all(result == [] for result in results)
+    assert db_calls == 0
+    assert cache_manager.cache_misses == 5
+    assert cache_manager.cache_hits == 0
 
 
 def test_invalidate_prefixes_deletes_all_query_prefix_keys(
@@ -209,21 +224,6 @@ def test_invalidate_prefixes_deletes_all_query_prefix_keys(
     nodes_with_keys = {ring.get_node(query[:length]) for length in range(1, len(query) + 1)}
     for node_name in nodes_with_keys:
         fake_clients[node_name].delete.assert_awaited()
-
-
-def test_prefix_lock_weakref_cleanup_allows_recreation(
-    cache_manager: CacheManager,
-) -> None:
-    prefix = "weakref-test"
-    lock = cache_manager._get_lock(prefix)
-    assert cache_manager._prefix_locks[prefix] is lock
-
-    del lock
-    gc.collect()
-
-    assert prefix not in cache_manager._prefix_locks
-    new_lock = cache_manager._get_lock(prefix)
-    assert isinstance(new_lock, asyncio.Lock)
 
 
 def test_connect_ping_failure_logs_warning_and_does_not_raise(

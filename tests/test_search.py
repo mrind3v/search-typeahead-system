@@ -45,7 +45,7 @@ def test_search_increments_count_after_flush(
     assert results == [("new query", 5)]
 
 
-def test_search_invalidates_cache_after_flush(
+def test_search_rewarms_cache_after_flush(
     client, fake_clients, db_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("src.config.BATCH_FLUSH_INTERVAL_SECONDS", 0.05)
@@ -60,5 +60,6 @@ def test_search_invalidates_cache_after_flush(
 
     response = client.get("/cache/debug", params={"prefix": prefix})
     assert response.status_code == 200
-    assert response.json()["hit"] is False
-    assert key not in fake_clients[node].store
+    assert response.json()["hit"] is True
+    assert key in fake_clients[node].store
+    assert fake_clients[node].store[key] == '[["iphone 15", 501], ["iphone 14", 400]]'

@@ -87,7 +87,7 @@ def test_batch_worker_flushes_on_size_threshold(
     assert get_suggestions_by_prefix("query", db_path=worker_db_path)
 
 
-def test_batch_worker_invalidates_prefixes_on_flush(
+def test_batch_worker_rebuilds_prefixes_on_flush(
     worker_cache_manager, worker_db_path, fake_clients
 ) -> None:
     from src.cache.consistent_hash import ConsistentHashRing
@@ -105,7 +105,8 @@ def test_batch_worker_invalidates_prefixes_on_flush(
         _run_worker_until_flush(queue, worker_cache_manager, worker_db_path)
     )
 
-    assert key not in fake_clients[node].store
+    assert key in fake_clients[node].store
+    assert fake_clients[node].store[key] == '[["iphone 15", 101]]'
 
 
 def test_batch_worker_shutdown_flushes_remaining_buffer(

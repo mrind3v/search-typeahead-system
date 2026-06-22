@@ -39,6 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_db(DATABASE_PATH)
     cache_manager = CacheManager()
     await cache_manager.connect()
+    await cache_manager.warm_all_from_db()
     app.state.cache_manager = cache_manager
 
     search_queue: asyncio.Queue[tuple[str, int]] = asyncio.Queue()

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 from src.cache.cache_manager import CacheManager
+from src.cache.consistent_hash import ConsistentHashRing
+from src.config import REDIS_NODES
 from src.database import bulk_insert_queries, get_trending_queries, init_db
 from src.services.decay_scheduler import run_decay_scheduler
 
@@ -69,22 +71,27 @@ def test_decay_scheduler_applies_decay_to_database(
     ]
 
 
-def test_decay_scheduler_flushes_all_cache(
+def test_decay_scheduler_flushes_and_rebuilds_cache(
     decay_cache_manager, decay_db_path, fake_clients
 ) -> None:
-    from src.config import CACHE_KEY_PREFIX, REDIS_NODES
+    import json
+
+    from src.config import CACHE_KEY_PREFIX
+
+    hot_node = ConsistentHashRing([node.name for node in REDIS_NODES]).get_node("hot")
+    hot_key = f"{CACHE_KEY_PREFIX}hot"
 
     for node in REDIS_NODES:
-        fake_clients[node.name].store[f"{CACHE_KEY_PREFIX}iph"] = "[]"
-        fake_clients[node.name].store[f"{CACHE_KEY_PREFIX}and"] = "[]"
+        fake_clients[node.name].store[hot_key] = "[]"
 
-    flush_mock = AsyncMock()
-    with patch.object(
-        decay_cache_manager, "flush_all_suggestion_cache", flush_mock
-    ):
-        asyncio.run(_run_scheduler_one_cycle(decay_cache_manager, decay_db_path))
+    asyncio.run(_run_scheduler_one_cycle(decay_cache_manager, decay_db_path))
 
-    flush_mock.assert_awaited_once()
+    for node in REDIS_NODES:
+        if node.name != hot_node:
+            assert hot_key not in fake_clients[node.name].store
+
+    assert hot_key in fake_clients[hot_node].store
+    assert json.loads(fake_clients[hot_node].store[hot_key]) == [["hot query", 900]]
 
 
 def test_decay_scheduler_cancellation_exits_cleanly(

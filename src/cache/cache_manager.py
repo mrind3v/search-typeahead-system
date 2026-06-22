@@ -1,11 +1,10 @@
-"""Redis cache manager with thundering herd protection (Phase 3)."""
+"""Redis cache manager with explicit warming (Phase 3)."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-import weakref
 from collections.abc import Callable
 from pathlib import Path
 
@@ -15,11 +14,12 @@ from src.cache.consistent_hash import ConsistentHashRing
 from src.config import (
     CACHE_KEY_PREFIX,
     CACHE_TTL_SECONDS,
+    MIN_PREFIX_LENGTH,
     REDIS_NODES,
     RedisNode,
     SUGGESTION_LIMIT,
 )
-from src.database import get_suggestions_by_prefix
+from src.database import get_all_queries, get_suggestions_by_prefix
 
 Suggestion = tuple[str, int]
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class CacheManager:
-    """Distributed prefix cache backed by Redis with lazy DB fill on miss."""
+    """Distributed prefix cache backed by Redis; reads are cache-only."""
 
     def __init__(
         self,
@@ -49,9 +49,6 @@ class CacheManager:
         self._node_by_name = {node.name: node for node in nodes}
         self._clients: dict[str, aioredis.Redis] = clients if clients is not None else {}
         self._owns_clients = clients is None
-        self._prefix_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = (
-            weakref.WeakValueDictionary()
-        )
         self._cache_hits = 0
         self._cache_misses = 0
 
@@ -108,13 +105,6 @@ class CacheManager:
             ) from exc
 
 
-    def _get_lock(self, prefix: str) -> asyncio.Lock:
-        lock = self._prefix_locks.get(prefix)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._prefix_locks[prefix] = lock
-        return lock
-
     @staticmethod
     def _serialize(data: list[Suggestion]) -> str:
         return json.dumps(data)
@@ -125,7 +115,7 @@ class CacheManager:
         return [(str(query), int(count)) for query, count in parsed]
 
     async def get_suggestions(self, prefix: str) -> list[Suggestion]:
-        """Return cached suggestions, filling from SQLite on miss."""
+        """Return cached suggestions; empty list on cache miss (no DB read)."""
         client = self._client_for_prefix(prefix)
         cache_key = self._cache_key(prefix)
 
@@ -135,22 +125,39 @@ class CacheManager:
             return self._deserialize(cached)
 
         self._cache_misses += 1
-        lock = self._get_lock(prefix)
-        async with lock:
-            cached = await client.get(cache_key)
-            if cached is not None:
-                self._cache_hits += 1
-                self._cache_misses -= 1
-                return self._deserialize(cached)
+        return []
 
-            suggestions = await asyncio.to_thread(
-                self._db_loader,
-                prefix,
-                self._suggestion_limit,
-                self._db_path,
-            )
-            await self.set_suggestions(prefix, suggestions)
-            return suggestions
+    async def warm_prefix(self, prefix: str) -> None:
+        """Load suggestions for a prefix from SQLite and store in Redis."""
+        if len(prefix) < MIN_PREFIX_LENGTH:
+            return
+
+        suggestions = await asyncio.to_thread(
+            self._db_loader,
+            prefix,
+            self._suggestion_limit,
+            self._db_path,
+        )
+        await self.set_suggestions(prefix, suggestions)
+
+    async def warm_prefixes_for_queries(self, queries: list[str]) -> None:
+        """Rebuild cache entries for every prefix of the given queries."""
+        prefixes: set[str] = set()
+        for query in queries:
+            if not query:
+                continue
+            for length in range(MIN_PREFIX_LENGTH, len(query) + 1):
+                prefixes.add(query[:length])
+
+        if not prefixes:
+            return
+
+        await asyncio.gather(*(self.warm_prefix(prefix) for prefix in prefixes))
+
+    async def warm_all_from_db(self) -> None:
+        """Rebuild the full suggestion cache from SQLite."""
+        queries = await asyncio.to_thread(get_all_queries, self._db_path)
+        await self.warm_prefixes_for_queries(queries)
 
     async def set_suggestions(
         self,
@@ -193,7 +200,7 @@ class CacheManager:
         }
 
     async def invalidate_prefixes(self, query: str) -> None:
-        """Delete cache keys for every prefix of the query (lazy invalidation)."""
+        """Delete cache keys for every prefix of the query."""
         if not query:
             return
 
