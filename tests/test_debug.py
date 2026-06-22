@@ -14,6 +14,8 @@ def test_debug_cache_reports_miss_without_filling_cache(
     prefix = "iph"
     node = ConsistentHashRing([node.name for node in REDIS_NODES]).get_node(prefix)
     key = f"{CACHE_KEY_PREFIX}{prefix}"
+    fake_clients[node].store.pop(key, None)
+    fake_clients[node].ttl_values.pop(key, None)
 
     response = client.get("/cache/debug", params={"prefix": prefix})
 

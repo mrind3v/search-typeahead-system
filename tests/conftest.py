@@ -20,7 +20,10 @@ def _noop_cache_manager_lifecycle(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Prevent TestClient lifespan from opening real Redis connections."""
-    if "test_cache_manager" in request.node.fspath.basename:
+    if request.node.fspath.basename in {
+        "test_cache_manager.py",
+        "test_decay_scheduler.py",
+    }:
         return
 
     async def noop_connect(self: CacheManager) -> None:

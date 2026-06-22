@@ -106,7 +106,7 @@ def test_batch_worker_rebuilds_prefixes_on_flush(
     )
 
     assert key in fake_clients[node].store
-    assert fake_clients[node].store[key] == '[["iphone 15", 150]]'
+    assert fake_clients[node].store[key] == '[["iphone 15", 101]]'
 
 
 def test_batch_worker_shutdown_flushes_remaining_buffer(

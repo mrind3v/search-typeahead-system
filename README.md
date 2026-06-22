@@ -109,24 +109,12 @@ Browser → FastAPI
            └─ Background: Decay Scheduler (daily 10% count decay + cache flush/re-warm)
 ```
 
-See [architecture.md](architecture.md) for design rationale (Trie rejection, consistent hashing, batch writes, nightly decay).
+See [architecture.md](architecture.md) for design rationale.
 
-## Key Design Choices
-
-| Decision | Rationale |
-|----------|-----------|
-| **SQLite + WAL** | Zero-config persistence; concurrent reads during batched writes |
-| **Redis + consistent hashing** | Horizontally shard prefix cache across 4 nodes without a coordinator |
-| **Non-empty prefix gate** | Skips suggest lookups for empty/whitespace-only input |
-| **Cache-only suggest reads** | `GET /suggest` reads Redis only; cold miss returns `[]` (no request-time SQLite) |
-| **SQLite-backed cache warming** | Startup, batch flush, and decay re-populate Redis from SQLite |
-| **`asyncio.Queue` batching** | Amortizes writes — 100 searches can collapse to 1 DB flush |
-| **Scheduled decay (not write-time EMA)** | Nightly `count × 0.9` matches instructor “night script” pattern |
-| **In-process metrics** | p95 latency, cache hit rate, DB counters, batch reduction ratio |
 
 ## Dataset
 
-**[AmazonQAC](https://huggingface.co/datasets/amazon/AmazonQAC)** is recommended for production-scale data (~40M terms, `popularity` → `count`). The full download (~59GB) is impractical for local dev, so `scripts/load_data.py` generates **200K synthetic queries** by default (product categories, India-specific patterns, power-law counts).
+`scripts/load_data.py` generates **200K synthetic queries** by default (product categories, India-specific patterns, power-law counts).
 
 ```bash
 python scripts/load_data.py
@@ -158,18 +146,3 @@ scripts/load_data.py
 tests/
 docs/screenshots/           # Optional demo screenshots
 ```
-
-## Demo Screenshots
-
-Optional UI captures live in [`docs/screenshots/`](docs/screenshots/) — for example, the search UI with suggestions, the trending panel, and JSON from `/metrics` or `/cache/debug?prefix=...`. With the server on port 8000:
-
-```bash
-open http://localhost:8000
-curl http://localhost:8000/metrics | python -m json.tool
-curl "http://localhost:8000/cache/debug?prefix=iph" | python -m json.tool
-```
-
-## Further Reading
-
-- [architecture.md](architecture.md) — detailed flows and design decisions
-- [context/lecture-transcript.md](context/lecture-transcript.md) — instructor lecture notes (SQL persistence + cache read path)
