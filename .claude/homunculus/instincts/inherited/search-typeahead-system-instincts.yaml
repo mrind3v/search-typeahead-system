@@ -1,0 +1,341 @@
+# Instincts generated from https://github.com/mrind3v/search-typeahead-system
+# Generated: 2026-06-19T11:03:02.572Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: search-typeahead-system-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, chore
+
+## Evidence
+
+- 3 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: docker-compose with 4 Redis nodes, chore: add .venv to gitignore and document Python 3.11+ venv setup
+
+---
+id: search-typeahead-system-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Commit Length
+
+## Action
+
+Write moderate-length commit messages (~51 characters)
+
+## Evidence
+
+- Average commit message length: 51 chars
+- Based on 3 commits
+
+---
+id: search-typeahead-system-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: search-typeahead-system-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: search-typeahead-system-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: search-typeahead-system-arch-type-based
+trigger: "when adding new code"
+confidence: 0.8
+domain: architecture
+source: repo-analysis
+source_repo: https://github.com/mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Arch Type Based
+
+## Action
+
+Place code in the appropriate type folder (components/, services/, utils/, etc.)
+
+## Evidence
+
+- Type-based module organization detected
+- Folders: cache, routers, services, static
+
+---
+id: search-typeahead-system-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: search-typeahead-system-instinct-file-naming
+trigger: "When creating a new source file"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Instinct File Naming
+
+## Action
+
+Name the file using snake_case
+
+## Evidence
+
+- Pattern in files: src/cache, src/routers, src/services, src/static
+
+---
+id: search-typeahead-system-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Instinct Function Naming
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.functions
+
+---
+id: search-typeahead-system-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.classes
+
+---
+id: search-typeahead-system-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Instinct Constant Naming
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.constants
+
+---
+id: search-typeahead-system-instinct-import-style
+trigger: "When importing modules within the package"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Instinct Import Style
+
+## Action
+
+Use relative imports
+
+## Evidence
+
+- Pattern in codeStyle.importStyle
+
+---
+id: search-typeahead-system-instinct-export-style
+trigger: "When exporting functions or classes"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in codeStyle.exportStyle
+
+---
+id: search-typeahead-system-instinct-git-commit-format
+trigger: "When writing a commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Instinct Git Commit Format
+
+## Action
+
+Use the conventional commit format with a prefix (feat, chore), a colon, and a short description
+
+## Evidence
+
+- Seen in commit: feat: docker-compose with 4 Redis nodes
+- Seen in commit: chore: add .venv to gitignore and document Python 3.11+ venv setup
+- Pattern in commits.prefixes
+
+---
+id: search-typeahead-system-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Instinct Commit Length
+
+## Action
+
+Keep the commit message concise, around 50 characters
+
+## Evidence
+
+- Pattern in commits.averageLength
+
+---
+id: search-typeahead-system-instinct-test-location
+trigger: "When adding new tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Instinct Test Location
+
+## Action
+
+Place test files in the separate 'tests' folder
+
+## Evidence
+
+- Pattern in architecture.folderStructure.testLocation
+- Pattern in commonFolders: tests
+
+---
+id: search-typeahead-system-instinct-test-organization
+trigger: "When organizing test files"
+confidence: 0.7
+domain: testing
+source: repo-analysis
+source_repo: mrind3v/search-typeahead-system
+---
+
+# Search Typeahead System Instinct Test Organization
+
+## Action
+
+Organize test files by type or feature, mirroring the main src folder structure
+
+## Evidence
+
+- Pattern in architecture.folderStructure.srcLayout
+- Pattern in testLocation: separate
+
